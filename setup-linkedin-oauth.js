@@ -17,13 +17,13 @@ const CLIENT_SECRET = process.env.LINKEDIN_CLIENT_SECRET;
 const REDIRECT_URI = process.env.LINKEDIN_REDIRECT_URI || 'http://localhost:3000/auth/linkedin/callback';
 const PORT = 3000;
 
-// Scopes de base (disponibles immédiatement)
-// w_member_social nécessite l'approbation du produit "Share on LinkedIn"
+// w_member_social (produit "Share on LinkedIn", déjà accordé à l'application) est
+// indispensable pour publier : sans lui, la vidéo et /partager sont refusés.
 const SCOPES = [
   'openid',
   'profile',
-  'email'
-  // 'w_member_social' // À activer après approbation LinkedIn
+  'email',
+  'w_member_social'
 ];
 
 const TOKEN_PATH = path.join(__dirname, 'linkedin-token.json');
@@ -138,9 +138,13 @@ function startOAuthServer() {
               profile: profile
             };
             
-            await fs.writeFile(TOKEN_PATH, JSON.stringify(tokenInfo, null, 2));
-            
+            await fs.writeFile(TOKEN_PATH, JSON.stringify(tokenInfo, null, 2), { mode: 0o600 });
+            await fs.chmod(TOKEN_PATH, 0o600);
+
             console.log('✅ Token sauvegardé dans:', TOKEN_PATH);
+            if (!/(^|[\s,])w_member_social($|[\s,])/.test(tokenInfo.scope || '')) {
+              console.log('⚠️  Permission w_member_social non accordée : publication LinkedIn impossible. Vérifie "Share on LinkedIn" dans l\'application LinkedIn.');
+            }
             if (profile) {
               console.log(`👤 Connecté en tant que: ${profile.name} (${profile.email})`);
             }
