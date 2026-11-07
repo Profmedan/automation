@@ -37,7 +37,8 @@ function articleIdFromResult(stdout) {
 }
 function createTrendFlow({ chatId, root, send, ack, run }) {
   const pendingDir = process.env.PENDING_ARTICLES_DIR || path.join(root,'pending-articles');
-  const ARTICLE_ID_RE = /^\d{4}-\d{2}-\d{2}T[0-9-]+$/;
+  // Brouillons générés (horodatés) et brouillons importés depuis Drive ou Gmail.
+  const ARTICLE_ID_RE = /^(?:\d{4}-\d{2}-\d{2}T[0-9-]+|(?:drive|gmail)-[a-f0-9]{24})$/;
   function previewButtons(id) {
     return { inline_keyboard: [
       [{ text:'📖 Afficher la fiche du brouillon',callback_data:`tv:preview:${id}` }],
@@ -73,7 +74,9 @@ function createTrendFlow({ chatId, root, send, ack, run }) {
       [{ text:'🔎 Trois nouveaux sujets',callback_data:'tv:trends' }],
       [{ text:'📋 Mes sujets restants',callback_data:'tv:remaining' }],
       [{ text:'🗂 Mes brouillons à lire',callback_data:'tv:drafts' }],
-      [{ text:'🔗 Rédiger depuis un lien Web',callback_data:'tv:article-help' }]
+      [{ text:'🔗 Rédiger depuis un lien Web',callback_data:'tv:article-help' }],
+      [{ text:'📬 Importer depuis Gmail',callback_data:'gs:gmail' }],
+      [{ text:'📣 Partager un article publié',callback_data:'gs:share' }]
     ] };
   }
   async function showCommandMenu() {

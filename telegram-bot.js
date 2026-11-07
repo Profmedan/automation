@@ -137,6 +137,26 @@ const imageFlow = require('./newsai-image-telegram.cjs').createTelegramImageFlow
   }
 });
 
+// /gmail et /partager : import Gmail volontaire et diffusion d'un article déjà publié (module blogger-automation).
+const gmailShareFlow = require(path.join(BLOGGER_AUTOMATION_PATH, 'telegram-gmail-share.cjs')).createGmailShareFlow({
+  chatId: TELEGRAM_CHAT_ID,
+  pendingDir: PENDING_ARTICLES_DIR,
+  stateFile: path.join(BLOGGER_AUTOMATION_PATH, 'logs', 'telegram-gmail-share-state.json'),
+  tmpDir: path.join(WORKSPACE_ROOT, 'automation-state', 'gmail-tmp'),
+  send: sendTelegramMessage,
+  ack: id => axios.post(`${TELEGRAM_API}/answerCallbackQuery`, { callback_query_id: id }),
+  run: args => runNodeScript(args, { cwd: BLOGGER_AUTOMATION_PATH }),
+  sharePipeline: () => import(require('node:url').pathToFileURL(path.join(BLOGGER_AUTOMATION_PATH, 'share-pipeline.mjs')).href),
+  linkedinReady: async () => {
+    const { linkedinConfigStatus } = await import(require('node:url').pathToFileURL(path.join(BLOGGER_AUTOMATION_PATH, 'linkedin-article.mjs')).href);
+    return linkedinConfigStatus(BLOGGER_AUTOMATION_PATH).ready;
+  },
+  linkedinVideo: async blogUrl => {
+    const { findLinkedInVideo } = await import(require('node:url').pathToFileURL(path.join(BLOGGER_AUTOMATION_PATH, 'share-pipeline.mjs')).href);
+    return findLinkedInVideo(LINKEDIN_VIDEOS_DIR, blogUrl);
+  }
+});
+
 function pickTelegramMedia(message) {
   if (message.document) {
     return { type: 'document', payload: message.document };
@@ -199,6 +219,8 @@ async function registerTelegramCommands() {
     {command:'restants',description:'Revoir les sujets non utilisés'},
     {command:'brouillons',description:'Retrouver les articles à lire'},
     {command:'article',description:'Rédiger depuis un lien Web (avec URL)'},
+    {command:'gmail',description:'Importer un article depuis Gmail (libellé BLOG_A_PUBLIER)'},
+    {command:'partager',description:'Diffuser un article publié sur un autre réseau'},
     {command:'start',description:'Menu principal et vidéos LinkedIn'}
   ];
   try {
@@ -208,7 +230,7 @@ async function registerTelegramCommands() {
     await axios.post(`${TELEGRAM_API}/setChatMenuButton`,{
       chat_id:TELEGRAM_CHAT_ID,menu_button:{type:'commands'}
     },{timeout:12000});
-    console.log('✅ Menu Telegram natif actualisé (6 commandes).');
+    console.log(`✅ Menu Telegram natif actualisé (${commands.length} commandes).`);
   } catch(error) {
     console.warn('⚠️ Menu Telegram natif non actualisé :',error.response?.data?.description || error.message);
   }
@@ -379,6 +401,7 @@ async function handleReplaceScene(command, message) {
 }
 
 async function handleMessage(message) {
+  if (await gmailShareFlow.handleMessage(message)) return;
   if (await trendFlow.handleMessage(message)) return;
   if (await imageFlow.handleMessage(message)) return;
   if (await ui.message(message)) return;
@@ -388,6 +411,7 @@ async function handleMessage(message) {
 
 async function processUpdate(update) {
   if (update.callback_query) {
+    if (await gmailShareFlow.handleCallback(update.callback_query)) return;
     if (await trendFlow.handleCallback(update.callback_query)) return;
     if (await imageFlow.handleCallback(update.callback_query)) return;
     const cb=update.callback_query;
@@ -405,7 +429,9 @@ async function processUpdate(update) {
       } else {
         const links=[`✅ Blogger : ${escapeHtml(st.blog_url)}`];
         if(channels==='facebook'||channels==='both') links.push(st.facebook_url?`📘 Facebook : ${escapeHtml(st.facebook_url)}`:`⚠️ Facebook : ${escapeHtml(st.facebook_error||st.facebook_state||'non confirmé')}`);
-        if(channels==='linkedin'||channels==='both') links.push(st.linkedin_url?`💼 LinkedIn : ${escapeHtml(st.linkedin_url)}`:`⚠️ LinkedIn : ${escapeHtml(st.linkedin_error||st.linkedin_state||'non confirmé')}`);
+        if(channels==='linkedin'||channels==='both') links.push(st.linkedin_url?`💼 LinkedIn : ${escapeHtml(st.linkedin_url)}`
+          :st.linkedin_state==='pending'?`⏸ LinkedIn : en attente — ${escapeHtml(st.linkedin_pending_reason||'connexion LinkedIn requise')}\nBlogger${channels==='both'?' et Facebook':''} non bloqué(s). Après reconnexion LinkedIn, utilise /partager.`
+          :`⚠️ LinkedIn : ${escapeHtml(st.linkedin_error||st.linkedin_state||'non confirmé')}`);
         await sendTelegramMessage(links.join('\n'));
       }
       return;
