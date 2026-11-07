@@ -1,0 +1,24 @@
+# Credentials et tokens
+.env
+linkedin-token.json
+
+# Node modules
+node_modules/
+
+# Output
+output/
+slides/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+concat.txt
+.env.bak*
+.env.save
