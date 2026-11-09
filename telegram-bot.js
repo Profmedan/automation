@@ -157,6 +157,30 @@ const gmailShareFlow = require(path.join(BLOGGER_AUTOMATION_PATH, 'telegram-gmai
   }
 });
 
+// /video : diffusion d'une vidéo prête (videos-a-diffuser/) sur Vive l'IA, Facebook et LinkedIn, après confirmation.
+const videoShareFlow = require(path.join(BLOGGER_AUTOMATION_PATH, 'telegram-video-share.cjs')).createVideoShareFlow({
+  chatId: TELEGRAM_CHAT_ID,
+  videosRoot: process.env.VIDEOS_A_DIFFUSER_DIR || path.join(WORKSPACE_ROOT, 'videos-a-diffuser'),
+  stateFile: path.join(BLOGGER_AUTOMATION_PATH, 'logs', 'telegram-video-share-state.json'),
+  send: sendTelegramMessage,
+  ack: id => axios.post(`${TELEGRAM_API}/answerCallbackQuery`, { callback_query_id: id }),
+  run: args => runNodeScript(args, { cwd: BLOGGER_AUTOMATION_PATH }),
+  videoShare: () => import(require('node:url').pathToFileURL(path.join(BLOGGER_AUTOMATION_PATH, 'video-share.mjs')).href),
+  linkedinReady: async () => {
+    const { linkedinConfigStatus } = await import(require('node:url').pathToFileURL(path.join(BLOGGER_AUTOMATION_PATH, 'linkedin-article.mjs')).href);
+    return linkedinConfigStatus(BLOGGER_AUTOMATION_PATH).ready;
+  },
+  sendVideo: async (file, caption) => {
+    const FormData = require('form-data');
+    const form = new FormData();
+    form.append('chat_id', TELEGRAM_CHAT_ID);
+    form.append('caption', caption);
+    form.append('supports_streaming', 'true');
+    form.append('video', require('node:fs').createReadStream(file));
+    await axios.post(`${TELEGRAM_API}/sendVideo`, form, { headers: form.getHeaders(), timeout: 180000, maxBodyLength: Infinity });
+  }
+});
+
 function pickTelegramMedia(message) {
   if (message.document) {
     return { type: 'document', payload: message.document };
@@ -221,6 +245,7 @@ async function registerTelegramCommands() {
     {command:'article',description:'Rédiger depuis un lien Web (avec URL)'},
     {command:'gmail',description:'Importer un article depuis Gmail (libellé BLOG_A_PUBLIER)'},
     {command:'partager',description:'Diffuser un article publié sur un autre réseau'},
+    {command:'video',description:'Publier une vidéo prête (Vive l’IA, Facebook, LinkedIn)'},
     {command:'start',description:'Menu principal et vidéos LinkedIn'}
   ];
   try {
@@ -402,6 +427,7 @@ async function handleReplaceScene(command, message) {
 
 async function handleMessage(message) {
   if (await gmailShareFlow.handleMessage(message)) return;
+  if (await videoShareFlow.handleMessage(message)) return;
   if (await trendFlow.handleMessage(message)) return;
   if (await imageFlow.handleMessage(message)) return;
   if (await ui.message(message)) return;
@@ -412,6 +438,7 @@ async function handleMessage(message) {
 async function processUpdate(update) {
   if (update.callback_query) {
     if (await gmailShareFlow.handleCallback(update.callback_query)) return;
+    if (await videoShareFlow.handleCallback(update.callback_query)) return;
     if (await trendFlow.handleCallback(update.callback_query)) return;
     if (await imageFlow.handleCallback(update.callback_query)) return;
     const cb=update.callback_query;
