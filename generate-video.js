@@ -9,7 +9,9 @@ require('dotenv').config();
 const fsExtra = require('fs');
 const fs = fsExtra.promises;
 const path = require('path');
-const { generateVideoScript } = require('./scripts/generate-script-dynamic'); // Version dynamique
+const { generateVideoScript } = require('./scripts/generate-script-dynamic'); // Script écrit depuis le plan éditorial
+const { genererPlanEditorial } = require('./scripts/editorial-plan');
+const { testerComprehension } = require('./scripts/comprehension-test');
 const { generateVoiceoverWithFallback } = require('./scripts/generate-voiceover-fallback');
 const { renderDynamicVideo } = require('./scripts/render-video-dynamic'); // Nouveau render
 const FormData = require('form-data');
@@ -69,71 +71,96 @@ async function generateLinkedInVideo(article) {
     const videoFolder = path.join(CONFIG.outputPath, timestamp);
     await fs.mkdir(videoFolder, { recursive: true });
 
-    // ÉTAPE 1: Générer le script vidéo (ChatGPT)
-    console.log('\\n📄 Génération du script vidéo...');
-    const videoScript = await generateVideoScript(article);
-    console.log(`✅ Script généré (${videoScript.duration}s estimé)`);
-    
-    // Sauvegarder le script
-    await fs.writeFile(
-      path.join(videoFolder, 'script.json'),
-      JSON.stringify(videoScript, null, 2)
-    );
+    // ÉTAPE 0 (obligatoire) : plan éditorial tiré de l'article, enregistré en JSON et vérifié avant le script
+    console.log('\\n🧭 Plan éditorial...');
+    const plan = await genererPlanEditorial(article);
+    await fs.writeFile(path.join(videoFolder, 'editorial-plan.json'), JSON.stringify(plan, null, 2));
+    console.log(`✅ Plan éditorial validé (${plan.developpement.length} sous-idées, ${plan.sources.length} source(s))`);
 
-    // ÉTAPE 2: Générer la voix-off (ElevenLabs avec fallback)
-    console.log('\\n🎙️  Génération de la voix-off...');
-    const audioPath = await generateVoiceoverWithFallback(
-      videoScript.narration,
-      CONFIG.voiceId,
-      path.join(videoFolder, 'voiceover.mp3')
-    );
-    console.log(`✅ Voix-off générée: ${audioPath}`);
-    
-    // ÉTAPE 2.5: Synchroniser les durées de scènes avec l'audio réel
-    const { execSync } = require('child_process');
-    const ffprobeCommand = `"${FFPROBE_PATH}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`;
-    let audioDuration = videoScript.duration; // Default fallback
-    
-    try {
-      audioDuration = parseFloat(
-        execSync(ffprobeCommand)
-          .toString()
-          .trim()
+    // ÉTAPES 1 à 3, refaites une fois avec les manques si le test de compréhension échoue
+    const produire = async (consignes = []) => {
+      // ÉTAPE 1: Script écrit scène par scène depuis le plan
+      console.log('\\n📄 Génération du script vidéo...');
+      const videoScript = await generateVideoScript(article, plan, { consignes });
+      console.log(`✅ Script généré (${videoScript.duration}s estimé)`);
+      await fs.writeFile(
+        path.join(videoFolder, 'script.json'),
+        JSON.stringify(videoScript, null, 2)
       );
-    } catch (error) {
-      console.log(`   ⚠️  Impossible de lire la durée audio (ffprobe indisponible), utilisation de la durée estimée: ${videoScript.duration}s`);
-    }
-    
-    // Calculer la durée totale actuelle du script
-    const scriptTotalDuration = videoScript.scenes.reduce((sum, scene) => sum + scene.duration, 0);
-    
-    console.log(`\\n⚖️  Synchronisation durées:`);
-    console.log(`   Audio: ${audioDuration.toFixed(2)}s`);
-    console.log(`   Script original: ${scriptTotalDuration}s`);
-    
-    // Ajuster proportionnellement toutes les durées de scènes
-    const adjustmentRatio = audioDuration / scriptTotalDuration;
-    videoScript.scenes = videoScript.scenes.map(scene => ({
-      ...scene,
-      duration: Math.max(2, scene.duration * adjustmentRatio) // Minimum 2s par scène
-    }));
-    
-    // Recalculer la durée totale ajustée
-    const adjustedTotalDuration = videoScript.scenes.reduce((sum, scene) => sum + scene.duration, 0);
-    videoScript.duration = adjustedTotalDuration;
-    
-    console.log(`   Après ajustement: ${adjustedTotalDuration.toFixed(2)}s`);
-    console.log(`   ✅ Synchronisé !`);
 
-    // ÉTAPE 3: Render la vidéo dynamique (images + texte + sous-titres)
-    console.log('\\n🎬 Création de la vidéo dynamique...');
-    const videoPath = await renderDynamicVideo(
-      videoScript,
-      audioPath,
-      path.join(videoFolder, 'video.mp4'),
-      article.url // Passer le lien de l'article pour la scène finale
-    );
-    console.log(`✅ Vidéo créée: ${videoPath}`);
+      // ÉTAPE 2: Générer la voix-off (ElevenLabs avec fallback)
+      console.log('\\n🎙️  Génération de la voix-off...');
+      const audioPath = await generateVoiceoverWithFallback(
+        videoScript.narration,
+        CONFIG.voiceId,
+        path.join(videoFolder, 'voiceover.mp3')
+      );
+      console.log(`✅ Voix-off générée: ${audioPath}`);
+    
+      // ÉTAPE 2.5: Synchroniser les durées de scènes avec l'audio réel
+      const { execSync } = require('child_process');
+      const ffprobeCommand = `"${FFPROBE_PATH}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`;
+      let audioDuration = videoScript.duration; // Default fallback
+    
+      try {
+        audioDuration = parseFloat(
+          execSync(ffprobeCommand)
+            .toString()
+            .trim()
+        );
+      } catch (error) {
+        console.log(`   ⚠️  Impossible de lire la durée audio (ffprobe indisponible), utilisation de la durée estimée: ${videoScript.duration}s`);
+      }
+    
+      // Calculer la durée totale actuelle du script
+      const scriptTotalDuration = videoScript.scenes.reduce((sum, scene) => sum + scene.duration, 0);
+    
+      console.log(`\\n⚖️  Synchronisation durées:`);
+      console.log(`   Audio: ${audioDuration.toFixed(2)}s`);
+      console.log(`   Script original: ${scriptTotalDuration}s`);
+    
+      // Ajuster proportionnellement toutes les durées de scènes
+      const adjustmentRatio = audioDuration / scriptTotalDuration;
+      videoScript.scenes = videoScript.scenes.map(scene => ({
+        ...scene,
+        duration: Math.max(2, scene.duration * adjustmentRatio) // Minimum 2s par scène
+      }));
+    
+      // Recalculer la durée totale ajustée
+      const adjustedTotalDuration = videoScript.scenes.reduce((sum, scene) => sum + scene.duration, 0);
+      videoScript.duration = adjustedTotalDuration;
+    
+      console.log(`   Après ajustement: ${adjustedTotalDuration.toFixed(2)}s`);
+      console.log(`   ✅ Synchronisé !`);
+
+      // ÉTAPE 3: Render la vidéo dynamique (images + texte + sous-titres)
+      console.log('\\n🎬 Création de la vidéo dynamique...');
+      const videoPath = await renderDynamicVideo(
+        videoScript,
+        audioPath,
+        path.join(videoFolder, 'video.mp4'),
+        article.url // Passer le lien de l'article pour la scène finale
+      );
+      console.log(`✅ Vidéo créée: ${videoPath}`);
+      return { videoScript, videoPath };
+    };
+
+    let { videoScript, videoPath } = await produire();
+
+    // ÉTAPE 3.5 (obligatoire) : test de compréhension sur le MP4 final, par un testeur qui n'a pas lu l'article
+    console.log('\\n🧪 Test de compréhension...');
+    const tester = () => testerComprehension({
+      videoPath, srtPath: path.join(videoFolder, 'subtitles.srt'), texteSecours: videoScript.narration, plan, dossier: videoFolder,
+    });
+    let comprehension = await tester();
+    if (!comprehension.ok) {
+      console.warn(`⚠️  Test de compréhension échoué :\\n- ${comprehension.manques.join('\\n- ')}\\n   → scènes refaites une fois`);
+      await fs.writeFile(path.join(videoFolder, 'comprehension-test-1.json'), JSON.stringify(comprehension, null, 2));
+      ({ videoScript, videoPath } = await produire(comprehension.manques.map((m) => `test de compréhension : ${m}`)));
+      comprehension = await tester();
+    }
+    await fs.writeFile(path.join(videoFolder, 'comprehension-test.json'), JSON.stringify(comprehension, null, 2));
+    console.log(comprehension.ok ? '✅ Test de compréhension réussi' : `❌ Test de compréhension toujours échoué : ${comprehension.manques.join(' ; ')}`);
 
     // ÉTAPE 4: Générer les métadonnées LinkedIn
     const metadata = {
@@ -143,6 +170,8 @@ async function generateLinkedInVideo(article) {
       blogUrl: article.url || '',
       articleUrl: article.url || '',
       hashtags: extractHashtags(article),
+      sources: plan.sources,
+      comprehension: { ok: comprehension.ok, manques: comprehension.manques },
       videoPath: videoPath,
       timestamp: new Date().toISOString(),
     };
@@ -178,7 +207,9 @@ async function generateLinkedInVideo(article) {
  */
 function generateCaption(article, script) {
   const hook = script.scenes[0].text;
-  const mainCaption = `${hook}\n\n${script.keyPoints.map((p, i) => `${i + 1}️⃣ ${p}`).join('\n')}\n\n💡 Plus de détails dans l'article complet (lien en commentaire)`;
+  // Les sources du plan éditorial sont reprises dans la description
+  const sources = (script.sources || []).map((s) => `• ${s.titre}${s.auteur ? ` — ${s.auteur}` : ''}`).join('\n');
+  const mainCaption = `${hook}\n\n${script.keyPoints.map((p, i) => `${i + 1}️⃣ ${p}`).join('\n')}\n\n💡 Plus de détails dans l'article complet (lien en commentaire)${sources ? `\n\n📚 Sources :\n${sources}` : ''}`;
   
   return `${mainCaption}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${LINKEDIN_PROCESS_TEXT}`;
 }
@@ -195,8 +226,8 @@ Après ma programmation initiale sur OpenClaw (orchestrateur IA open-source) + C
 3️⃣ Image blog — Illustration créée par DALL-E 3 ou deAPI.ai (FLUX), hébergée sur ImgBB
 4️⃣ Approbation article — Preview sur Telegram : approuver, rejeter, regénérer sur nouveau sujet, ou regénérer avec mon propre prompt/plan SEO
 5️⃣ Publication blog — Publié sur Blogger + sauvegarde Google Drive + email
-6️⃣ Script vidéo — Scénario 18 scènes généré par GPT-4o, fidèle aux faits/chiffres/noms de l'article
-7️⃣ Narration — Texte généré par Claude Haiku (Anthropic), 350 mots minimum
+6️⃣ Plan éditorial — Idée principale, accroche, sous-idées avec preuves, limites, conclusion et sources, tirés de l'article et vérifiés avant le script
+7️⃣ Script et narration — Une scène par ligne du plan, écrite par Claude Haiku (Anthropic), puis test de compréhension sur la vidéo finale
 8️⃣ Voix-off — Narration avec ma voix clonée via ElevenLabs
 9️⃣ Images vidéo — Visuels générés par DALL-E 3 + Fal.ai (FLUX Schnell), ou remplacés par mes propres photos/vidéos via Telegram
 🔟 Montage — Vidéo assemblée avec sous-titres automatiques (Whisper) via ffmpeg
@@ -280,6 +311,11 @@ async function sendTelegramVideoNotification(videoFolder, videoId, article, driv
   }
   if (driveLinks?.recapUrl) {
     parts.push(`<b>Récap :</b> ${escapeHtml(driveLinks.recapUrl)}`);
+  }
+  if (metadata.comprehension) {
+    parts.push(metadata.comprehension.ok
+      ? '🧪 <b>Test de compréhension :</b> réussi'
+      : `🧪 <b>Test de compréhension : ÉCHOUÉ</b>\n${metadata.comprehension.manques.map((m) => `• ${escapeHtml(m)}`).join('\n')}`);
   }
   if (captionPreview) {
     parts.push(`<b>Légende :</b> ${escapeHtml(captionPreview)}${metadata.caption && metadata.caption.length > 500 ? '…' : ''}`);

@@ -10,7 +10,8 @@
     "from-drive": "node fetch-and-generate.js",
     "approve": "node handle-approval.js",
     "linkedin-auth": "node setup-linkedin-oauth.js",
-    "test-linkedin": "node scripts/linkedin-publisher.js"
+    "test-linkedin": "node scripts/linkedin-publisher.js",
+    "test:plan": "node --test tests/editorial-plan.test.js"
   },
   "keywords": [],
   "author": "",

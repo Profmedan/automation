@@ -1,223 +1,137 @@
-const { jsonrepair } = require('jsonrepair');
+/**
+ * Script vidéo écrit À PARTIR DU PLAN ÉDITORIAL (11 nov. 2026).
+ *
+ * Avant : un prompt « 18 scènes, 90 s, 800 mots » écrit directement depuis l'article, puis une seconde
+ * narration réécrite par Haiku et précédée de « Bonjour ». Les scènes pouvaient n'être qu'un mot-titre.
+ * Maintenant : chaque scène correspond à une ligne du plan (planRef) et dit concrètement ce que le
+ * spectateur comprend ; la narration est la suite des narrations de scènes, sans réécriture.
+ */
+const {
+  validerPlanEditorial, genererPlanEditorial, lignesDuPlan, mots, lireJson, appelerClaude, estMotAbstraitSeul, hoteDuBlog, MAX_MOTS_ECRAN,
+} = require('./editorial-plan');
 
-async function generateVideoScript(article) {
-  const prompt = `LANGUE : Rédige OBLIGATOIREMENT en français.
+const TYPE_VISUEL = { accroche: 'hook', idee_principale: 'stat', developpement: 'visual', nuance: 'split', conclusion: 'quote', appel: 'cta', sources: 'cta' };
 
-Tu es un journaliste vidéo LinkedIn avec 10 millions d'abonnés. Tes vidéos cartonnent parce qu'elles provoquent une émotion dès la première seconde et donnent envie de lire l'article complet.
-
-SUJET : ${article.title}
-CONTENU SOURCE COMPLET (utilise TOUS les faits, chiffres, noms, anecdotes ci-dessous) :
-${article.content}
-
-STRUCTURE NARRATIVE EN 18 SCÈNES (OBLIGATOIRE) :
-
-Scènes 1-2 — HOOK CHOC (3s chacune)
-→ Commence par LE fait le plus stupéfiant de l'article. Pas d'introduction. Direct.
-→ Une stat impossible à ignorer OU une affirmation qui choque OU une question qui dérange
-
-Scènes 3-5 — TENSION (4s chacune)
-→ Pourquoi c'est important MAINTENANT pour le spectateur
-→ Vouvoiement strict : "vous", jamais "tu"
-
-Scènes 6-13 — DÉVELOPPEMENT (4-5s chacune)
-→ Les faits réels de l'article, dans l'ordre de l'histoire
-→ Chaque scène = une idée. Pas deux.
-→ Alterne : fait concret → implication → fait concret → implication
-
-Scènes 14-16 — RÉVÉLATION (4s chacune)
-→ L'angle que personne n'a vu. La conséquence inattendue.
-→ "Ce que personne ne dit..." / "Le vrai problème c'est..."
-
-Scènes 17-18 — FIN OUVERTE + APPEL À L'ACTION (3-4s chacune)
-→ Donne envie de lire l'article complet
-→ Une question sans réponse. Pas de conclusion morale.
-→ "Et vous, êtes-vous prêt ?"
-
-LONGUEUR OBLIGATOIRE : La narration doit faire MINIMUM 800 mots et 90 secondes. Développe chaque scène avec suffisamment de détails.
-
-RÈGLES ABSOLUES DE FIDÉLITÉ À L'ARTICLE :
-- OBLIGATOIRE : utiliser les noms réels (personnes, entreprises, produits) mentionnés dans l'article
-- OBLIGATOIRE : reprendre les chiffres précis de l'article (%, €, dates, volumes)
-- OBLIGATOIRE : reprendre les anecdotes et exemples concrets de l'article
-- INTERDIT : inventer des faits, chiffres ou exemples absents de l'article
-- INTERDIT : généraliser quand l'article donne des détails précis
-
-RÈGLES ABSOLUES NARRATION :
-- Maximum 10 mots par phrase parlée
-- Rythme : courte. pause. longue — courte. pause.
-- Zéro jargon technique sans explication immédiate
-- OBLIGATOIRE : vouvoiement strict — "vous", jamais "tu" ni "toi" ni "ton" ni "ta"
-- La narration doit DONNER ENVIE de lire l'article — pas le résumer entièrement
-
-RÈGLES VISUELS (imagePrompt en anglais) :
-- JAMAIS de texte dans l'image — NO TEXT, NO WORDS, NO LETTERS dans le prompt
-- Chaque scène doit avoir un imagePrompt UNIQUE et différent des autres
-- Cinématographique et concret : "extreme close-up of human eye reflecting data streams, dramatic lighting, 8K"
-- Jamais générique : pas "technology concept", pas "innovation background", pas "professional image"
-- Chaque image renforce émotionnellement la narration de sa scène spécifique
-- Alterne obligatoirement : visage humain expressif / objet technique macro / lieu réel / données visuelles
-- Ajoute toujours : "no text, no words, no letters, no writing" à chaque imagePrompt
-
-Réponds EN JSON UNIQUEMENT :
-{
-  "title": "${article.title}",
-  "hook": "6 mots maximum — choc immédiat",
-  "keyPoints": ["fait choc 1", "fait choc 2", "fait choc 3"],
-  "scenes": [
-    {
-      "id": 1,
-      "narration": "voix-off max 10 mots, vouvoiement, ton direct et professionnel",
-      "duration": 4,
-      "visualType": "hook|tension|story|reveal|cta|close",
-      "imagePrompt": "cinematic description in english, photorealistic, specific"
-    }
-  ],
-  "narration": "narration complète MINIMUM 90 secondes — au moins 800 mots — conversationnel, rythmé, donne envie de lire l'article",
-  "duration": 72,
-  "hashtags": ["#IA", "#Innovation", "#Tech"]
-}`;
-
-  console.log('⏱️  Appel Claude Haiku lancé...');
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
-      system: 'Tu es un expert vidéo LinkedIn viral. Réponds TOUJOURS en JSON valide uniquement, sans markdown, sans backticks.',
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`OpenAI API erreur ${response.status}: ${err}`);
-  }
-
-  console.log('✅ Réponse reçue');
-
-  const data = await response.json();
-  let raw = data.content[0].text;
-  raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
-
-  let scriptData;
-  try {
-    scriptData = JSON.parse(raw);
-  } catch (err) {
-    console.warn('⚠️  JSON principal invalide, tentative jsonrepair...');
-    try {
-      scriptData = JSON.parse(jsonrepair(raw));
-    } catch (repairErr) {
-      console.warn('⚠️  jsonrepair insuffisant, tentative de découpe manuelle...');
-      const firstBrace = raw.indexOf('{');
-      const lastBrace = raw.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        const fallback = raw.substring(firstBrace, lastBrace + 1);
-        try {
-          scriptData = JSON.parse(jsonrepair(fallback));
-        } catch (innerErr) {
-          console.error('❌ Réponse Claude non parsable (extrait) :\n', fallback.slice(0, 2000));
-          throw innerErr;
-        }
-      } else {
-        console.error('❌ Réponse Claude non parsable :\n', raw);
-        throw repairErr;
-      }
-    }
-  }
-
-  if (!scriptData.scenes || scriptData.scenes.length < 12) {
-    console.warn(`⚠️  Script court: ${scriptData.scenes?.length || 0} plans`);
-  }
-
-  // Générer la narration avec Claude Haiku (meilleur rapport qualité/prix)
-  console.log('🎙️  Génération narration avec Claude Haiku...');
-  const sceneSummary = scriptData.scenes.map((s, i) => `Scène ${i+1} (${s.visualType}): ${s.narration}`).join('\n');
-  
-  const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2000,
-      messages: [{
-        role: 'user',
-        content: `Tu es un narrateur professionnel pour vidéos LinkedIn. 
-        
-Rédige une narration fluide et naturelle pour une vidéo de 90 secondes sur : "${scriptData.title}"
-
-Structure des scènes :
-${sceneSummary}
-
-RÈGLES ABSOLUES :
-- Vouvoiement strict (vous, jamais tu)
-- OBLIGATOIRE : conserver TOUS les noms propres, chiffres et exemples concrets du script
-- INTERDIT : remplacer un exemple concret par une généralité
-- INTERDIT : supprimer un chiffre ou un nom réel présent dans le script
-- Minimum ABSOLU : 350 mots — chaque scène développée avec 2-3 phrases riches
-- Français parfait, zéro anglicisme
-- Phrases courtes et rythmées, 10-15 mots maximum par phrase
-- Ton direct, engageant, professionnel
-- Transitions naturelles entre les scènes
-- Durée cible : 100-110 secondes (environ 350-400 mots à voix normale)
-- MINIMUM ABSOLU : 350 mots — développe chaque point avec 2-3 phrases riches en détails concrets
-- Donner envie de lire l'article complet à la fin
-
-Réponds UNIQUEMENT avec le texte de la narration.
-INTERDIT absolument :
-- "D'accord", "Bien sûr", "Voici", "Narration :", "Scène X"
-- Tout méta-commentaire sur la narration
-- Toute indication de mise en scène
-- Toute numérotation de scènes
-- Toute ponctuation de type [pause], [musique], etc.
-Commence directement par le premier mot de la narration.`
-      }]
-    })
-  });
-
-  if (!claudeResponse.ok) {
-    const err = await claudeResponse.text();
-    console.warn('⚠️  Claude Haiku indisponible, utilisation narration GPT-4o:', err);
-  } else {
-    const claudeData = await claudeResponse.json();
-    let claudeNarration = claudeData.content[0].text.trim();
-    // Nettoyer méta-commentaires
-    claudeNarration = claudeNarration
-      .replace(/^(d'accord|bien sûr|voici|narration\s*:)[^\n]*/gi, '')
-      .replace(/scène\s*\d+[^.]*\./gi, '')
-      .replace(/\[.*?\]/g, '')
-      .replace(/^\n+/, '')
-      .trim();
-    // Toujours commencer par Bonjour
-    if (!claudeNarration.startsWith('Bonjour')) {
-      claudeNarration = 'Bonjour. ' + claudeNarration;
-    }
-    const wordCount = claudeNarration.split(' ').length;
-    console.log(`📝 Narration Claude Haiku: ${wordCount} mots`);
-    scriptData.narration = claudeNarration;
-  }
-
-  if (!scriptData.narration) {
-    throw new Error('Narration manquante');
-  }
-
-  scriptData.scenes = scriptData.scenes.map(scene => ({
-    ...scene,
-    duration: Math.min(scene.duration || 4, 5),
-    text: (scene.text || '').substring(0, 80),
-  }));
-
-  console.log(`✅ Script généré: ${scriptData.scenes.length} plans, ${scriptData.duration}s total`);
-  return scriptData;
+function typeDeLigne(ref) {
+  return ref.split('.')[0];
 }
 
-module.exports = { generateVideoScript };
+function promptScript(article, plan, erreursPrecedentes = []) {
+  const reprise = erreursPrecedentes.length
+    ? `\n\nTA PROPOSITION PRÉCÉDENTE A ÉTÉ REFUSÉE POUR CES RAISONS, CORRIGE-LES TOUTES :\n- ${erreursPrecedentes.join('\n- ')}\n`
+    : '';
+  return `LANGUE : français. Vouvoiement strict.
+
+Écris le script d'une vidéo de 60 s à partir de ce PLAN ÉDITORIAL validé. Le plan fait foi : n'ajoute aucun fait absent du plan ou de l'article.
+
+TITRE : ${article.title}
+PLAN ÉDITORIAL :
+${JSON.stringify(plan, null, 2)}
+
+RÈGLES DES SCÈNES :
+- Une scène par ligne du plan, dans cet ordre : ${lignesDuPlan(plan).join(', ')}. Chaque scène porte "planRef" = le nom de sa ligne.
+- Chaque scène répond à : « qu'est-ce que le spectateur comprend ici ? » (champ "comprend").
+- Interdit : une scène composée seulement d'un mot abstrait, d'une icône décorative ou d'une transition sans contenu.
+- Le texte à l'écran ("text", ${MAX_MOTS_ECRAN} mots au maximum, qui a du sens seul) et la voix ("narration") disent la même idée : l'écran résume, la voix explique.
+- Sous-idées : la voix dit l'affirmation, l'explication (pourquoi, comment) et la preuve. Si la preuve est un chiffre, "source" donne le titre de sa source.
+- Nuances : chacune dite concrètement (« l'étude ne porte que sur… »), jamais « Nuances » ou « Limites » seul.
+- Scène "appel" : la voix dit l'adresse du blog (${plan.appel && plan.appel.adresse_blog}) et l'écran l'affiche.
+- Scène "sources" : la voix et l'écran nomment le titre et l'auteur de chaque source.
+- Minutage : accroche 0–3 s, idée principale 3–8 s, sous-idées 8–42 s, nuances 42–50 s, conclusion 50–55 s, appel et sources 55–60 s. Environ 150 mots dits en tout.
+- La première scène commence directement par l'accroche (pas de « Bonjour »).
+
+RÈGLES VISUELS (imagePrompt en anglais) : l'image MONTRE l'idée de la scène (schéma, comparaison, objet concret du plan, champ "visuel"), jamais un simple décor ; ajoute toujours "no text, no words, no letters, no writing".
+${reprise}
+Réponds en JSON UNIQUEMENT, sans markdown :
+{
+  "title": "${String(article.title || '').replace(/"/g, '\\"')}",
+  "scenes": [
+    { "id": 1, "planRef": "accroche", "comprend": "...", "narration": "...", "text": "6 mots max", "source": "", "duration": 3, "imagePrompt": "..." }
+  ],
+  "hashtags": ["#IA"]
+}`;
+}
+
+/**
+ * Vérifie le script contre le plan. Renvoie la liste des erreurs (vide si le script est bon).
+ */
+function validerScript(script, plan) {
+  const erreurs = [];
+  const scenes = Array.isArray(script && script.scenes) ? script.scenes : [];
+  if (scenes.length === 0) return ['script sans scène'];
+  const lignes = lignesDuPlan(plan);
+  const vues = new Set();
+  scenes.forEach((s, i) => {
+    const ou = `scène ${i + 1}`;
+    if (!lignes.includes(s.planRef)) erreurs.push(`${ou} : planRef « ${s.planRef} » ne correspond à aucune ligne du plan`);
+    else vues.add(s.planRef);
+    if (!String(s.comprend || '').trim()) erreurs.push(`${ou} : « qu'est-ce que le spectateur comprend ici ? » sans réponse`);
+    if (!String(s.narration || '').trim()) erreurs.push(`${ou} : narration vide`);
+    if (!String(s.text || '').trim()) erreurs.push(`${ou} : texte à l'écran vide`);
+    else {
+      if (mots(s.text).length > MAX_MOTS_ECRAN) erreurs.push(`${ou} : texte à l'écran de plus de ${MAX_MOTS_ECRAN} mots`);
+      if (estMotAbstraitSeul(s.text)) erreurs.push(`${ou} : texte à l'écran réduit à un mot abstrait (« ${s.text} »)`);
+    }
+  });
+  for (const l of lignes) if (!vues.has(l)) erreurs.push(`ligne du plan sans scène : ${l}`);
+  if (scenes[0] && scenes[0].planRef !== 'accroche') erreurs.push('la première scène doit être l\'accroche');
+
+  const adresse = plan.appel && plan.appel.adresse_blog;
+  const appel = scenes.filter((s) => s.planRef === 'appel');
+  if (adresse && appel.length && !appel.some((s) => `${s.narration} ${s.text}`.toLowerCase().includes(adresse.toLowerCase().split('.')[0]))) {
+    erreurs.push(`scène appel : l'adresse du blog (${adresse}) n'est ni dite ni affichée`);
+  }
+  const sourcesScene = scenes.filter((s) => s.planRef === 'sources').map((s) => `${s.narration} ${s.text}`.toLowerCase()).join(' ');
+  for (const src of plan.sources || []) {
+    const nom = String(src.auteur || src.titre || '').toLowerCase().split(/[\s,]+/).find((m) => m.length > 3);
+    if (nom && !sourcesScene.includes(nom)) erreurs.push(`scène sources : « ${src.auteur || src.titre} » n'est pas nommé`);
+  }
+  return erreurs;
+}
+
+/**
+ * @param {{title, content, url}} article
+ * @param {object} [plan]  plan éditorial validé ; s'il manque (anciens appelants), il est écrit ici d'abord
+ * @param {{appelerModele?: Function, consignes?: string[]}} options  consignes : erreurs à corriger (ex. test de compréhension)
+ */
+async function generateVideoScript(article, plan, options = {}) {
+  // Étape obligatoire : pas de script sans plan éditorial validé
+  if (!plan) plan = await genererPlanEditorial(article, options);
+  const erreursPlan = validerPlanEditorial(plan, { articleUrl: article.url });
+  if (erreursPlan.length) throw new Error(`Plan éditorial invalide : ${erreursPlan.join(' ; ')}`);
+
+  const appeler = options.appelerModele || ((p, s) => appelerClaude(p, s, 4096));
+  const system = 'Tu es scénariste vidéo. Tu suis le plan éditorial ligne par ligne. Réponds TOUJOURS en JSON valide uniquement, sans markdown.';
+  let erreurs = [...(options.consignes || [])];
+  let script;
+  for (let essai = 1; essai <= 2; essai++) {
+    console.log(`⏱️  Script depuis le plan éditorial (essai ${essai})...`);
+    script = lireJson(await appeler(promptScript(article, plan, erreurs), system));
+    erreurs = validerScript(script, plan);
+    if (erreurs.length === 0) break;
+    console.warn(`⚠️  Script refusé (essai ${essai}) :\n- ${erreurs.join('\n- ')}`);
+  }
+  if (erreurs.length) throw new Error(`Script invalide après reprise : ${erreurs.join(' ; ')}`);
+
+  script.scenes = script.scenes.map((s, i) => ({
+    ...s,
+    id: i + 1,
+    visualType: TYPE_VISUEL[typeDeLigne(s.planRef)] || 'visual',
+    duration: Math.max(2, Math.min(Number(s.duration) || 4, 8)),
+    text: String(s.text || '').substring(0, 80),
+  }));
+  script.editorialPlan = plan;
+  script.title = script.title || article.title;
+  script.hook = plan.accroche.texte_ecran;
+  script.keyPoints = plan.developpement.map((d) => d.affirmation);
+  script.sources = plan.sources;
+  script.blogAddress = plan.appel.adresse_blog || hoteDuBlog(article.url);
+  // La voix dit exactement les narrations des scènes, dans l'ordre du plan
+  script.narration = script.scenes.map((s) => s.narration.trim()).join(' ');
+  script.duration = script.scenes.reduce((t, s) => t + s.duration, 0);
+  script.hashtags = script.hashtags || ['#IA'];
+  console.log(`✅ Script généré : ${script.scenes.length} scènes, ${script.duration}s, ${script.narration.split(/\s+/).length} mots`);
+  return script;
+}
+
+module.exports = { generateVideoScript, validerScript, promptScript };
