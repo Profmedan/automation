@@ -11,9 +11,8 @@ const { uploadVideoToDrive } = require('./scripts/drive-utils');
 
 const FFMPEG_PATH = '/usr/local/Caskroom/mambaforge/base/bin/ffmpeg';
 const VIDEO_BASE_DIR = path.join(__dirname, '..', 'linkedin-videos');
-// Jeton et chat lus uniquement dans .env (jamais écrits en dur).
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+// Jeton et chat lus uniquement dans .env (jamais écrits en dur), même source que le bot, quel que soit le dossier courant.
+const { token: TELEGRAM_BOT_TOKEN, chatId: TELEGRAM_CHAT_ID } = require(path.join(__dirname, '..', 'blogger-automation', 'telegram-config.cjs')).telegramConfig(__dirname);
 if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
   console.error('❌ TELEGRAM_BOT_TOKEN et TELEGRAM_CHAT_ID doivent être définis dans .env');
   process.exit(1);

@@ -13,9 +13,12 @@ const BLOGGER_AUTOMATION_PATH = path.join(WORKSPACE_ROOT, 'blogger-automation');
 const MEDIA_INBOUND_DIR = path.join(WORKSPACE_ROOT, '..', 'media', 'inbound');
 const TELEGRAM_STATE_PATH = path.join(WORKSPACE_ROOT, 'automation-state', 'telegram-state.json');
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const TELEGRAM_API = TELEGRAM_BOT_TOKEN ? `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}` : null;
+// Source unique : le .env de ce dossier, prioritaire sur l'environnement mémorisé par PM2 (qui peut garder un ancien jeton).
+const { token: TELEGRAM_BOT_TOKEN, chatId: TELEGRAM_CHAT_ID } = require(path.join(BLOGGER_AUTOMATION_PATH, 'telegram-config.cjs')).telegramConfig(SCRIPT_DIR);
+// Les programmes lancés par le bot héritent du même jeton (en mémoire seulement, jamais journalisé).
+if (TELEGRAM_BOT_TOKEN) process.env.TELEGRAM_BOT_TOKEN = TELEGRAM_BOT_TOKEN;
+if (TELEGRAM_CHAT_ID) process.env.TELEGRAM_CHAT_ID = TELEGRAM_CHAT_ID;
+const TELEGRAM_API =TELEGRAM_BOT_TOKEN ? `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}` : null;
 
 if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
   console.error('❌ TELEGRAM_BOT_TOKEN ou TELEGRAM_CHAT_ID manquant.');

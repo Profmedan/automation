@@ -27,8 +27,8 @@ const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.join(__dirname, '..');
 const PENDING_ARTICLES_DIR = process.env.PENDING_ARTICLES_DIR || path.join(WORKSPACE_ROOT, 'pending-articles');
 const BLOGGER_TOKEN_PATH = process.env.BLOGGER_TOKEN_PATH || path.join(WORKSPACE_ROOT, 'blogger-automation', 'token.json');
 const FFPROBE_PATH = process.env.FFPROBE_PATH || 'ffprobe';
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+// Même source que le bot : .env de ce dossier, quel que soit le dossier courant.
+const { token: TELEGRAM_BOT_TOKEN, chatId: TELEGRAM_CHAT_ID } = require(path.join(WORKSPACE_ROOT, 'blogger-automation', 'telegram-config.cjs')).telegramConfig(__dirname);
 const TELEGRAM_API_BASE = TELEGRAM_BOT_TOKEN ? `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}` : null;
 
 async function hydrateArticleFromStatus(article) {
