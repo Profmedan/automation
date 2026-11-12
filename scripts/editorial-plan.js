@@ -84,7 +84,12 @@ function validerPlanEditorial(plan, options = {}) {
       if (!remplie(s && s[champ])) erreurs.push(`${ou} : champ « ${champ} » manquant`);
     }
     verifierTexteEcran(s && s.texte_ecran, ou, erreurs);
+    // La source s'affiche au moment où le chiffre apparaît : elle doit donc être connue dès le plan
+    if (/\d/.test(`${(s && s.preuve) || ''} ${(s && s.texte_ecran) || ''}`) && !remplie(s && s.source)) {
+      erreurs.push(`${ou} : preuve chiffrée sans source (titre de la source du chiffre)`);
+    }
   });
+  if (/\d/.test(acc.texte_ecran || '') && !remplie(acc.source)) erreurs.push('accroche : chiffre à l\'écran sans source');
 
   const nuances = Array.isArray(plan.nuances) ? plan.nuances : [];
   nuances.forEach((n, i) => {
@@ -137,16 +142,16 @@ PLAN ÉDITORIAL (vidéo de 60 s) :
 4. Nuances ou limites, si l'article en donne : chacune formulée concrètement (« l'étude ne porte que sur… »), jamais un mot-titre seul comme « Nuances » ou « Limites ». Liste vide si l'article n'en donne pas.
 5. Conclusion de l'article : reformulée fidèlement en une ou deux phrases. C'est la réponse à l'accroche.
 6. Appel à l'action : aller lire l'article complet, avec l'adresse du blog (${adresse}) dite et affichée.
-7. Sources : titre et auteur de chaque source principale citée par l'article.
+7. Sources : titre et auteur de chaque source principale citée par l'article. Chaque preuve chiffrée indique sa source : elle sera affichée à l'écran au moment où le chiffre apparaît, puis reprise en fin de vidéo et dans la description.
 
 Minutage indicatif : accroche 0–3 s, idée principale 3–8 s, sous-idées 8–42 s, nuances 42–50 s, conclusion 50–55 s, appel et sources 55–60 s.
 ${reprise}
 Réponds en JSON UNIQUEMENT, sans markdown :
 {
   "idee_principale": "une phrase",
-  "accroche": { "type": "question|chiffre|contraste", "texte_voix": "...", "texte_ecran": "6 mots max", "preuve": "le fait de l'article utilisé" },
+  "accroche": { "type": "question|chiffre|contraste", "texte_voix": "...", "texte_ecran": "6 mots max", "preuve": "le fait de l'article utilisé", "source": "titre de la source si l'accroche affiche un chiffre" },
   "developpement": [
-    { "affirmation": "...", "explication": "...", "preuve": "...", "visuel": "...", "texte_ecran": "6 mots max", "source": "titre de la source du chiffre, s'il y en a un" }
+    { "affirmation": "...", "explication": "...", "preuve": "...", "visuel": "...", "texte_ecran": "6 mots max", "source": "titre de la source du chiffre (obligatoire si la preuve contient un chiffre)" }
   ],
   "nuances": [ { "texte_voix": "l'étude ne porte que sur…", "texte_ecran": "6 mots max" } ],
   "conclusion": "une ou deux phrases",
@@ -213,7 +218,44 @@ function lignesDuPlan(plan) {
   ];
 }
 
+/** Libellé affiché d'une source du plan : « titre », auteur (retrouvé dans plan.sources si possible). */
+function libelleSource(nom, plan) {
+  const n = String(nom || '').trim();
+  if (!n) return '';
+  const bas = n.toLowerCase();
+  const s = (plan.sources || []).find((x) => [x.titre, x.auteur].some((v) => v && (bas.includes(String(v).toLowerCase()) || String(v).toLowerCase().includes(bas))));
+  if (!s) return n;
+  const auteur = String(s.auteur || '').replace(/\s*\(.*\)\s*/, ' ').trim();
+  return auteur ? `« ${s.titre} », ${auteur}` : `« ${s.titre} »`;
+}
+
+/** Rapport lisible joint à chaque vidéo : le plan éditorial puis le résultat du test de compréhension. */
+function rapportVideo(plan, comprehension) {
+  const l = ['# Rapport de la vidéo', '', '## Plan éditorial', '',
+    `**Idée principale :** ${plan.idee_principale}`, '',
+    `**Accroche (${(plan.accroche || {}).type || '?'}) :** ${(plan.accroche || {}).texte_voix || ''} — écran : « ${(plan.accroche || {}).texte_ecran || ''} »`, '',
+    '**Sous-idées :**'];
+  (plan.developpement || []).forEach((d, i) => {
+    l.push(`${i + 1}. ${d.affirmation}`, `   - Pourquoi : ${d.explication}`, `   - Preuve : ${d.preuve}${d.source ? ` (source : ${d.source})` : ''}`,
+      `   - Visuel : ${d.visuel}`, `   - Écran : « ${d.texte_ecran} »`);
+  });
+  l.push('', '**Nuances :**', ...((plan.nuances || []).length ? plan.nuances.map((n) => `- ${n.texte_voix}`) : ['- (aucune dans l\'article)']));
+  l.push('', `**Conclusion :** ${plan.conclusion}`, '', `**Appel :** ${(plan.appel || {}).texte_voix || ''} — adresse affichée : ${(plan.appel || {}).adresse_blog || ''}`, '',
+    '**Sources :**', ...(plan.sources || []).map((s) => `- « ${s.titre} », ${s.auteur}${s.url ? ` — ${s.url}` : ''}`), '');
+  if (!comprehension) {
+    l.push('## Test de compréhension : NON FAIT', '');
+    return l.join('\n');
+  }
+  l.push(`## Test de compréhension : ${comprehension.ok ? 'RÉUSSI' : 'ÉCHOUÉ'}`, '',
+    'Testeur séparé : il n\'a lu ni l\'article ni le plan ; il n\'a reçu que les images du MP4 final (une toutes les 2 s) et les sous-titres.', '');
+  if ((comprehension.manques || []).length) l.push('**Manques ou erreurs :**', ...comprehension.manques.map((m) => `- ${m}`), '');
+  l.push('**Ce que le testeur a compris :**', '```json', JSON.stringify(comprehension.reponse || {}, null, 2), '```', '');
+  return l.join('\n');
+}
+
 module.exports = {
+  libelleSource,
+  rapportVideo,
   MAX_MOTS_ECRAN,
   mots,
   estMotAbstraitSeul,

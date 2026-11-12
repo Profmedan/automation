@@ -10,7 +10,7 @@ const fsExtra = require('fs');
 const fs = fsExtra.promises;
 const path = require('path');
 const { generateVideoScript } = require('./scripts/generate-script-dynamic'); // Script écrit depuis le plan éditorial
-const { genererPlanEditorial } = require('./scripts/editorial-plan');
+const { genererPlanEditorial, rapportVideo } = require('./scripts/editorial-plan');
 const { testerComprehension } = require('./scripts/comprehension-test');
 const { generateVoiceoverWithFallback } = require('./scripts/generate-voiceover-fallback');
 const { renderDynamicVideo } = require('./scripts/render-video-dynamic'); // Nouveau render
@@ -160,6 +160,8 @@ async function generateLinkedInVideo(article) {
       comprehension = await tester();
     }
     await fs.writeFile(path.join(videoFolder, 'comprehension-test.json'), JSON.stringify(comprehension, null, 2));
+    // Rapport de la vidéo : plan éditorial + résultat du test, joints à chaque vidéo
+    await fs.writeFile(path.join(videoFolder, 'RAPPORT.md'), rapportVideo(plan, comprehension));
     console.log(comprehension.ok ? '✅ Test de compréhension réussi' : `❌ Test de compréhension toujours échoué : ${comprehension.manques.join(' ; ')}`);
 
     // ÉTAPE 4: Générer les métadonnées LinkedIn

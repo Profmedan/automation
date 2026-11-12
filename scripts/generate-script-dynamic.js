@@ -7,7 +7,7 @@
  * spectateur comprend ; la narration est la suite des narrations de scènes, sans réécriture.
  */
 const {
-  validerPlanEditorial, genererPlanEditorial, lignesDuPlan, mots, lireJson, appelerClaude, estMotAbstraitSeul, hoteDuBlog, MAX_MOTS_ECRAN,
+  validerPlanEditorial, genererPlanEditorial, lignesDuPlan, mots, lireJson, appelerClaude, estMotAbstraitSeul, hoteDuBlog, libelleSource, MAX_MOTS_ECRAN,
 } = require('./editorial-plan');
 
 const TYPE_VISUEL = { accroche: 'hook', idee_principale: 'stat', developpement: 'visual', nuance: 'split', conclusion: 'quote', appel: 'cta', sources: 'cta' };
@@ -33,7 +33,8 @@ RÈGLES DES SCÈNES :
 - Chaque scène répond à : « qu'est-ce que le spectateur comprend ici ? » (champ "comprend").
 - Interdit : une scène composée seulement d'un mot abstrait, d'une icône décorative ou d'une transition sans contenu.
 - Le texte à l'écran ("text", ${MAX_MOTS_ECRAN} mots au maximum, qui a du sens seul) et la voix ("narration") disent la même idée : l'écran résume, la voix explique.
-- Sous-idées : la voix dit l'affirmation, l'explication (pourquoi, comment) et la preuve. Si la preuve est un chiffre, "source" donne le titre de sa source.
+- Sous-idées : la voix dit l'affirmation, l'explication (pourquoi, comment) et la preuve.
+- Toute scène qui affiche un chiffre a "source" = le titre de la source de ce chiffre (affiché à l'écran sous le texte).
 - Nuances : chacune dite concrètement (« l'étude ne porte que sur… »), jamais « Nuances » ou « Limites » seul.
 - Scène "appel" : la voix dit l'adresse du blog (${plan.appel && plan.appel.adresse_blog}) et l'écran l'affiche.
 - Scène "sources" : la voix et l'écran nomment le titre et l'auteur de chaque source.
@@ -50,6 +51,14 @@ Réponds en JSON UNIQUEMENT, sans markdown :
   ],
   "hashtags": ["#IA"]
 }`;
+}
+
+/** Source que le plan donne à une ligne (preuve d'une sous-idée, ou accroche chiffrée). */
+function sourceDuPlan(ref, plan) {
+  const m = /^developpement\.(\d+)$/.exec(ref || '');
+  if (m) return ((plan.developpement || [])[Number(m[1]) - 1] || {}).source || '';
+  if (ref === 'accroche') return (plan.accroche || {}).source || '';
+  return '';
 }
 
 /**
@@ -71,6 +80,9 @@ function validerScript(script, plan) {
     else {
       if (mots(s.text).length > MAX_MOTS_ECRAN) erreurs.push(`${ou} : texte à l'écran de plus de ${MAX_MOTS_ECRAN} mots`);
       if (estMotAbstraitSeul(s.text)) erreurs.push(`${ou} : texte à l'écran réduit à un mot abstrait (« ${s.text} »)`);
+      if (/\d/.test(s.text) && !['appel', 'sources'].includes(s.planRef) && !String(s.source || '').trim() && !sourceDuPlan(s.planRef, plan)) {
+        erreurs.push(`${ou} : chiffre à l'écran sans source`);
+      }
     }
   });
   for (const l of lignes) if (!vues.has(l)) erreurs.push(`ligne du plan sans scène : ${l}`);
@@ -119,6 +131,10 @@ async function generateVideoScript(article, plan, options = {}) {
     visualType: TYPE_VISUEL[typeDeLigne(s.planRef)] || 'visual',
     duration: Math.max(2, Math.min(Number(s.duration) || 4, 8)),
     text: String(s.text || '').substring(0, 80),
+    // Affiché par le rendu : la source sous un chiffre, l'adresse sur l'appel, la liste des sources à la fin
+    source: libelleSource(sourceDuPlan(s.planRef, plan) || s.source, plan),
+    ...(s.planRef === 'appel' ? { adresse: plan.appel.adresse_blog } : {}),
+    ...(s.planRef === 'sources' ? { sourcesEcran: plan.sources.map((x) => ({ titre: x.titre, auteur: x.auteur })) } : {}),
   }));
   script.editorialPlan = plan;
   script.title = script.title || article.title;

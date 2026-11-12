@@ -233,4 +233,5 @@ test('generate-video.js : plan avant le script, test de compréhension avant l\'
   assert.ok(iPlan > 0 && iEcrit > iPlan && iScript > iEcrit, 'plan écrit et enregistré avant le script');
   assert.ok(iTest > iScript && iMeta > iTest, 'test de compréhension avant les métadonnées et l\'approbation');
   assert.match(corps, /'comprehension-test\.json'/);
+  assert.ok(corps.indexOf("'RAPPORT.md'") > iTest, 'rapport (plan + test) écrit après le test');
 });

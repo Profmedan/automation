@@ -5,7 +5,8 @@
  * Format optimisé LinkedIn avec plans courts (3-5s)
  */
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
+const { argumentsSlide } = require('./texte-ecran');
 const fs = require('fs').promises;
 const path = require('path');
 const { generateVideoImages } = require('./fetch-images');
@@ -131,87 +132,14 @@ async function generateSubtitles(audioPath, outputSrtPath) {
 }
 
 /**
- * Crée une image avec texte overlay
+ * Crée une slide : image (ou fond de couleur) + texte de la scène, source, adresse ou liste des sources.
+ * Le texte est décidé par scripts/texte-ecran.js (gabarit éditorial du 11 nov. 2026).
  */
-async function createImageWithText(imagePath, text, outputPath, scene, articleUrl = null) {
-  // Couleurs selon type de plan
-  const colors = {
-    hook: '#FF3366',
-    stat: '#00D9FF',
-    visual: '#7B68EE',
-    quote: '#FFB800',
-    split: '#00C896',
-    cta: '#FF3366'
-  };
-  
-  const accentColor = colors[scene.visualType] || '#FFFFFF';
-  
-  // Simplifier le texte pour éviter problèmes d'échappement
-  const safeText = text
-    .replace(/'/g, "'")
-    .replace(/"/g, "'")
-    .replace(/[:\\[\]]/g, ' ')
-    .substring(0, 80);
-  
-  // Écrire le texte dans un fichier temporaire
-  const textFile = outputPath.replace('.jpg', '.txt');
-  await fs.writeFile(textFile, safeText);
-  
-  // Si c'est une scène CTA avec "article" et qu'on a le lien, préparer l'affichage du lien
-  const isLinkScene = scene.visualType === 'cta' && 
-                      (text.toLowerCase().includes('article') || 
-                       text.toLowerCase().includes('blog') ||
-                       text.toLowerCase().includes('lien'));
-  
-  let linkText = '';
-  let linkFile = null;
-  if (isLinkScene && articleUrl) {
-    // Extraire juste le domaine + chemin court pour affichage
-    try {
-      const url = new URL(articleUrl);
-      linkText = url.hostname + url.pathname.substring(0, 30);
-      linkFile = outputPath.replace('.jpg', '_link.txt');
-      await fs.writeFile(linkFile, linkText);
-    } catch (e) {
-      linkText = articleUrl.substring(0, 50);
-      linkFile = outputPath.replace('.jpg', '_link.txt');
-      await fs.writeFile(linkFile, linkText);
-    }
-  }
-  
+async function createImageWithText(imagePath, text, outputPath, scene) {
   try {
-    // Si pas d'image source, créer fond coloré
-    let inputSource;
-    if (!imagePath) {
-      inputSource = `-f lavfi -i color=c=${accentColor}:s=1080x1080:d=0.1`;
-    } else {
-      inputSource = `-i "${imagePath}"`;
-    }
-    
-    
-    // Si c'est une scène avec lien, ajouter le lien en dessous
-    if (linkFile) {
-      // pas de texte overlay lien
-    }
-    
-    const ffmpegCmd = `${FFMPEG_PATH} ${inputSource} \
-      -vf "scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080" \
-      -update 1 -frames:v 1 "${outputPath}" -y 2>&1`;
-    
-    try {
-      execSync(ffmpegCmd, { stdio: 'pipe' });
-    } catch (err) {
-      console.error('❌ ffmpeg stderr:', err.stderr?.toString());
-      console.error('❌ ffmpeg stdout:', err.stdout?.toString());
-      throw err;
-    }
-    
-    await fs.unlink(textFile).catch(() => {});
-    if (linkFile) await fs.unlink(linkFile).catch(() => {});
-    
+    execFileSync(FFMPEG_PATH, argumentsSlide(imagePath, { ...scene, text }, outputPath, path.dirname(outputPath)), { stdio: 'pipe' });
   } catch (error) {
-    console.error(`   ❌ Erreur création image+texte:`, error.message);
-    await fs.unlink(textFile).catch(() => {});
+    console.error(`   ❌ Erreur création image+texte:`, error.stderr?.toString() || error.message);
     throw error;
   }
 }
@@ -256,8 +184,7 @@ async function renderDynamicVideo(scriptData, audioPath, outputPath, articleUrl 
         imageData?.path || null,
         scene.text,
         slidePath,
-        scene,
-        i === scriptData.scenes.length - 1 ? articleUrl : null
+        scene
       );
     }
     
