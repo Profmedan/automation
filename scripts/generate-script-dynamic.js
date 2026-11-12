@@ -7,7 +7,7 @@
  * spectateur comprend ; la narration est la suite des narrations de scènes, sans réécriture.
  */
 const {
-  validerPlanEditorial, genererPlanEditorial, lignesDuPlan, mots, lireJson, appelerClaude, estMotAbstraitSeul, hoteDuBlog, libelleSource, MAX_MOTS_ECRAN, ESSAIS, raccourcirTextesEcran,
+  validerPlanEditorial, genererPlanEditorial, lignesDuPlan, mots, lireJson, appelerClaude, estMotAbstraitSeul, hoteDuBlog, libelleSource, MAX_MOTS_ECRAN, NOM_BLOG, corrigerNomBlog, nomBlogFautif, ESSAIS, raccourcirTextesEcran,
 } = require('./editorial-plan');
 const { TYPES_VISUELS, validerVisuel } = require('./local/scenes-visuelles');
 
@@ -56,7 +56,7 @@ RÈGLES DES SCÈNES :
 - Sous-idées : la voix dit l'affirmation, l'explication (pourquoi, comment) et la preuve.
 - Toute scène qui affiche un chiffre a "source" = le titre de la source de ce chiffre (affiché à l'écran sous le texte).
 - Nuances : chacune dite concrètement (« l'étude ne porte que sur… »), jamais « Nuances » ou « Limites » seul.
-- Scène "appel" : la voix dit l'adresse du blog (${plan.appel && plan.appel.adresse_blog}) et l'écran l'affiche.
+- Scène "appel" : la voix dit le nom du blog, exactement « ${NOM_BLOG} », puis son adresse (${plan.appel && plan.appel.adresse_blog}) ; l'écran affiche l'adresse.
 - Scène "sources" : la voix nomme la source principale en quelques mots (ex. « Source : l'étude de Robocurve. ») ; la liste complète (titre et auteur) s'affiche automatiquement.
 - Minutage : accroche 0–3 s, idée principale 3–8 s, sous-idées 8–42 s, nuances 42–50 s, conclusion 50–55 s, appel et sources 55–60 s.
 - La première scène commence directement par l'accroche (pas de « Bonjour »).
@@ -92,11 +92,13 @@ function sourceDuPlan(ref, plan) {
 }
 
 /**
- * Corrections mécaniques, sans appel au modèle : « nuances.1 » → « nuance.1 », et texte à l'écran de la scène
+ * Corrections mécaniques, sans appel au modèle : nom du blog (« Vivre l'IA » → « Vive l'IA »), « nuances.1 » → « nuance.1 », et texte à l'écran de la scène
  * « sources » fixé (« Sources : Robocurve et 2 autres ») ; la liste complète s'affiche dessous.
  */
 function normaliserScenes(script, plan) {
   for (const sc of script.scenes || []) {
+    sc.narration = corrigerNomBlog(sc.narration);
+    sc.text = corrigerNomBlog(sc.text);
     sc.planRef = String(sc.planRef || '').trim()
       .replace(/^nuances\./, 'nuance.').replace(/^d[ée]veloppements?\./, 'developpement.').replace(/^id[ée]e[_ ]principale$/, 'idee_principale');
     if (sc.planRef === 'sources') {
@@ -171,6 +173,8 @@ function validerScript(script, plan) {
     else vues.add(s.planRef);
     if (!String(s.comprend || '').trim()) erreurs.push(`${ou} : « qu'est-ce que le spectateur comprend ici ? » sans réponse`);
     if (!String(s.narration || '').trim()) erreurs.push(`${ou} : narration vide`);
+    const nomFautif = nomBlogFautif(`${s.narration || ''} ${s.text || ''}`);
+    if (nomFautif) erreurs.push(`${ou} : le blog s'appelle « ${NOM_BLOG} », pas « ${nomFautif} »`);
     if (!String(s.text || '').trim()) erreurs.push(`${ou} : texte à l'écran vide`);
     else {
       if (mots(s.text).length > MAX_MOTS_ECRAN) erreurs.push(`${ou} : texte à l'écran de plus de ${MAX_MOTS_ECRAN} mots`);

@@ -16,9 +16,22 @@ const DEBUT = 0.25;        // silence avant la première phrase
 const ENTRE_SCENES = 0.35; // silence entre deux scènes
 const SEUIL_RESSEMBLANCE = 0.8;
 
-/** Texte réellement dit : l'adresse du blog épelée, « IA » prononcé « i-a ». */
-function texteDit(texte, adresseBlog) {
+// Dictionnaire de prononciation : mot écrit → graphie lue par la voix (voir la note du fichier)
+const PRONONCIATION = JSON.parse(fs.readFileSync(path.join(__dirname, 'prononciation.json'), 'utf-8')).mots || {};
+
+/** Applique un dictionnaire { écrit: dit } mot entier par mot entier, en respectant la casse écrite. */
+function appliquerPrononciation(texte, dico = PRONONCIATION) {
   let t = String(texte || '');
+  for (const [ecrit, dit] of Object.entries(dico)) {
+    const motif = ecrit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    t = t.replace(new RegExp(`(?<![\\p{L}\\d-])${motif}(?![\\p{L}\\d-])`, 'gu'), dit);
+  }
+  return t;
+}
+
+/** Texte réellement dit : dictionnaire de prononciation, adresse du blog épelée, « IA » prononcé « i-a ». */
+function texteDit(texte, adresseBlog, dico = PRONONCIATION) {
+  let t = appliquerPrononciation(texte, dico);
   if (adresseBlog) {
     const ditAdresse = adresseBlog.replace(/\./g, ' point ');
     t = t.split(adresseBlog).join(ditAdresse);
@@ -138,4 +151,4 @@ async function genererVoixLocale(scenes, dossierVideo, options = {}) {
   return resultat;
 }
 
-module.exports = { genererVoixLocale, texteDit };
+module.exports = { genererVoixLocale, texteDit, appliquerPrononciation };

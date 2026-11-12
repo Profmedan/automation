@@ -67,6 +67,25 @@ function remplie(v) {
   return typeof v === 'string' && v.trim().length > 0;
 }
 
+// Nom du blog, tel qu'il est dit et écrit. Le 12 nov. 2026, Haiku a écrit « le blog Vivre l'IA ».
+const NOM_BLOG = process.env.NOM_BLOG || "Vive l'IA";
+
+/** Remet le bon nom du blog (« Vivre l'IA », « Vive l'I.A. » → « Vive l'IA ») ; l'adresse vive-lia.blogspot.com n'est pas touchée. */
+function corrigerNomBlog(texte) {
+  if (typeof texte !== 'string') return texte;
+  return texte.replace(/(?<![\w.-])viv(?:r?e|ez)\s+l['’]\s*i\.?\s?a\b\.?/gi, NOM_BLOG);
+}
+
+/** Nom donné au blog dans un texte (« le blog X : … »), s'il n'est pas le bon. Renvoie '' si tout va bien. */
+function nomBlogFautif(texte) {
+  const m = /\bblog\s+([A-ZÀ-Ý][^:,.;!?]*?)\s*(?=[:,.;!?]|$)/.exec(String(texte || ''));
+  if (!m) return '';
+  // « le blog Vive-lia.blogspot.com » : c'est l'adresse, pas un nom
+  if (/^\.[a-z]/i.test(String(texte).slice(m.index + m[0].length))) return '';
+  const nom = m[1].trim();
+  return nom.toLowerCase() === NOM_BLOG.toLowerCase() ? '' : nom;
+}
+
 function hoteDuBlog(url) {
   try {
     return new URL(url).host.replace(/^www\./, '');
@@ -175,7 +194,7 @@ Réponds en JSON UNIQUEMENT, sans markdown :
   ],
   "nuances": [ { "texte_voix": "l'étude ne porte que sur…", "texte_ecran": "6 mots max" } ],
   "conclusion": "une ou deux phrases",
-  "appel": { "texte_voix": "L'analyse complète est sur … : ${adresse}", "adresse_blog": "${adresse}" },
+  "appel": { "texte_voix": "L'analyse complète est sur le blog ${NOM_BLOG} : ${adresse}", "adresse_blog": "${adresse}" },
   "sources": [ { "titre": "...", "auteur": "...", "url": "..." } ]
 }`;
 }
@@ -374,4 +393,7 @@ module.exports = {
   lireJson,
   appelerClaude,
   hoteDuBlog,
+  NOM_BLOG,
+  corrigerNomBlog,
+  nomBlogFautif,
 };

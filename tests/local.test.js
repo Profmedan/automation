@@ -8,7 +8,7 @@ const path = require('path');
 
 const { verifierUrl, installerGarde, ServicePayantBloque, HOTES_PAYANTS } = require('../scripts/local/services-payants');
 const { alignerMots } = require('../scripts/local/whisper-local');
-const { texteDit } = require('../scripts/local/voix-locale');
+const { texteDit, appliquerPrononciation } = require('../scripts/local/voix-locale');
 const { postClaude } = require('../scripts/editorial-plan');
 const { validerVisuel, htmlScene, tempsDuNombre } = require('../scripts/local/scenes-visuelles');
 const { groupesSousTitres, fenetresScenes, srt } = require('../scripts/local/rendu-hyperframes');
@@ -167,4 +167,14 @@ test('Claude : une coupure réseau ou un 529 est réessayé, une erreur 400 ne l
   n = 0;
   await assert.rejects(postClaude({}, { attente: async () => {}, envoyer: async () => { n++; return reponse(400, { error: 'bad' }); } }), /erreur 400/);
   assert.equal(n, 1);
+});
+
+test('voix : le dictionnaire de prononciation change la voix mot entier par mot entier, jamais l\'adresse', () => {
+  const dico = { Robocurve: 'Robo-keurve' };
+  assert.equal(appliquerPrononciation('Robocurve, robocurve, Robocurves et Robocurve-X.', dico), 'Robo-keurve, robocurve, Robocurves et Robocurve-X.');
+  assert.equal(texteDit("L'étude Robocurve. Blog Vive l'IA : vive-lia.blogspot.com", 'vive-lia.blogspot.com', dico),
+    "L'étude Robo-keurve. Blog Vive l'i-a : vive-lia point blogspot point com");
+  // Le dictionnaire livré ne contient que des graphies écoutées (aucune le 12 nov. 2026)
+  const livre = JSON.parse(fs.readFileSync(path.join(RACINE, 'scripts', 'local', 'prononciation.json'), 'utf-8'));
+  assert.equal(typeof livre.mots, 'object');
 });

@@ -337,3 +337,25 @@ test('une citation inventée n\'apparaît jamais à l\'écran : le visuel devien
   const script = await generateVideoScript(article, plan, { appelerModele: async () => JSON.stringify(s) });
   assert.deepEqual(script.scenes.find((x) => x.planRef === 'nuance.2').visuel, { type: 'titre' });
 });
+
+test('nom du blog : « Vivre l\'IA » est corrigé avant la voix, un autre nom est refusé, l\'adresse n\'est pas touchée', async () => {
+  const { corrigerNomBlog, nomBlogFautif } = require('../scripts/editorial-plan');
+  // Écrit par Haiku le 12 nov. 2026 (7e génération)
+  assert.equal(corrigerNomBlog("L'analyse complète est sur le blog Vivre l'IA : vive-lia.blogspot.com"),
+    "L'analyse complète est sur le blog Vive l'IA : vive-lia.blogspot.com");
+  assert.equal(corrigerNomBlog('sur le blog Vive l’I.A. : vive-lia.blogspot.com'), "sur le blog Vive l'IA : vive-lia.blogspot.com");
+  assert.equal(corrigerNomBlog('vive-lia.blogspot.com'), 'vive-lia.blogspot.com');
+  assert.equal(nomBlogFautif("sur le blog Vive l'IA : vive-lia.blogspot.com"), '');
+  assert.equal(nomBlogFautif('sur le blog Vive-lia.blogspot.com'), '');
+  assert.equal(nomBlogFautif("sur le blog L'IA au quotidien : vive-lia.blogspot.com"), "L'IA au quotidien");
+
+  const plan = planBon();
+  const mauvais = scriptBon(plan);
+  mauvais.scenes.find((s) => s.planRef === 'appel').narration = "L'analyse complète est sur le blog L'IA au quotidien : vive-lia.blogspot.com";
+  assert.ok(contient(validerScript(mauvais, plan), /le blog s'appelle « Vive l'IA », pas « L'IA au quotidien »/));
+
+  const vivre = scriptBon(plan);
+  vivre.scenes.find((s) => s.planRef === 'appel').narration = "L'analyse complète est sur le blog Vivre l'IA : vive-lia.blogspot.com";
+  const script = await generateVideoScript(ARTICLE, plan, { appelerModele: async () => JSON.stringify(vivre) });
+  assert.match(script.scenes.find((s) => s.planRef === 'appel').narration, /le blog Vive l'IA : vive-lia\.blogspot\.com/);
+});
