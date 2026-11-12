@@ -11,7 +11,7 @@
     "approve": "node handle-approval.js",
     "linkedin-auth": "node setup-linkedin-oauth.js",
     "test-linkedin": "node scripts/linkedin-publisher.js",
-    "test:plan": "node --test tests/editorial-plan.test.js tests/texte-ecran.test.js"
+    "test:plan": "node --test tests/editorial-plan.test.js tests/texte-ecran.test.js tests/local.test.js"
   },
   "keywords": [],
   "author": "",

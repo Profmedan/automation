@@ -26,10 +26,10 @@ function scriptBon(plan) {
       comprend: `ce que montre ${ref}`,
       narration: ref === 'appel' ? plan.appel.texte_voix
         : ref === 'sources' ? 'Sources : Robocurve, Perceptual Attacks on Embodied AI ; et l\'article de Vive l\'IA.'
-          : `Narration concrète de ${ref}.`,
+          : `Narration concrète de ${ref} : une idée précise et vérifiable.`,
       text: ref === 'appel' ? 'vive-lia.blogspot.com' : ref === 'sources' ? 'Robocurve · Vive l\'IA' : 'Texte concret de scène',
       duration: 4,
-      imagePrompt: 'diagram, no text, no words, no letters, no writing',
+      visuel: { type: 'titre' },
     })),
   };
 }
@@ -114,18 +114,24 @@ test('le texte à l\'écran fait 6 mots au maximum ; la ponctuation ne compte pa
   assert.ok(contient(validerPlanEditorial(p), /sous-idée 1 : texte à l'écran de plus de 6 mots/));
 });
 
-test('genererPlanEditorial reprend une fois avec les erreurs, puis refuse un plan invalide', async () => {
+test('genererPlanEditorial : 3 essais, chaque reprise reçoit toutes les erreurs déjà vues, puis refus', async () => {
   const prompts = [];
-  const mauvais = { ...planBon(), conclusion: '' };
+  // Cas réel du 12 nov. : l'essai 1 a une nuance 2 trop longue, l'essai 2 corrige mais allonge la nuance 1
+  const p1 = planBon(); p1.nuances[1].texte_ecran = 'Test en laboratoire, pas en conditions réelles';
+  const p2 = planBon(); p2.nuances[0].texte_ecran = 'Un seul robot, douze essais par test';
+  const reponses = [p1, p2, p2];
   await assert.rejects(
-    genererPlanEditorial(ARTICLE, { appelerModele: async (p) => { prompts.push(p); return JSON.stringify(mauvais); } }),
-    /Plan éditorial invalide après reprise/,
+    // La passe de raccourcissement échoue ici (réponse vide) : le refus après 3 essais doit tenir
+    genererPlanEditorial(ARTICLE, { appelerModele: async (p) => { if (/RACCOURCIS/.test(p)) return '[]'; prompts.push(p); return JSON.stringify(reponses[prompts.length - 1]); } }),
+    /Plan éditorial invalide après 3 essais/,
   );
-  assert.equal(prompts.length, 2);
-  assert.match(prompts[1], /REFUSÉE[\s\S]*conclusion/);
+  assert.equal(prompts.length, 3);
+  assert.match(prompts[1], /REFUSÉE[\s\S]*nuance 2/);
+  assert.match(prompts[2], /nuance 2[\s\S]*nuance 1|nuance 1[\s\S]*nuance 2/, 'les deux erreurs sont rappelées');
+  assert.match(prompts[0], /compte les mots un par un/);
 
   let n = 0;
-  const plan = await genererPlanEditorial(ARTICLE, { appelerModele: async () => JSON.stringify(n++ ? planBon() : mauvais) });
+  const plan = await genererPlanEditorial(ARTICLE, { appelerModele: async () => JSON.stringify(n++ < 2 ? p1 : planBon()) });
   assert.equal(plan.appel.adresse_blog, 'vive-lia.blogspot.com');
 });
 
@@ -167,14 +173,31 @@ test('le script est refusé s\'il oublie une ligne du plan, l\'adresse, une sour
 
   const s4 = scriptBon(plan);
   Object.assign(s4.scenes.find((s) => s.planRef === 'sources'), { narration: 'Merci.', text: 'Fin de la vidéo' });
-  assert.ok(contient(validerScript(s4, plan), /scène sources : « Robocurve/));
+  assert.ok(contient(validerScript(s4, plan), /scène sources : la source principale/));
 });
 
-test('generateVideoScript lève une erreur si le script reste invalide après reprise', async () => {
+test('le plan garde 2 nuances au maximum ; un script trop long reçoit le budget de chaque scène', () => {
+  const { budgetsMots, MOTS_MAX } = require('../scripts/generate-script-dynamic');
+  const p = planBon();
+  p.nuances = [...p.nuances, ...p.nuances];
+  assert.ok(contient(validerPlanEditorial(p, { articleUrl: URL_ARTICLE }), /nuances : 2 au maximum/));
+
+  const plan = planBon();
+  const b = budgetsMots(plan);
+  const total = Object.values(b).reduce((x, y) => x + y, 0);
+  assert.ok(total <= MOTS_MAX && total >= MOTS_MAX - 10, `budget total ${total}`);
+  const long = scriptBon(plan);
+  long.scenes.find((x) => x.planRef === 'developpement.1').narration = Array(120).fill('mot').join(' ');
+  const e = validerScript(long, plan);
+  assert.ok(contient(e, /narration de \d+ mots/));
+  assert.ok(contient(e, new RegExp(`scène 3 : 120 mots pour un budget de ${b['developpement.1']}`)));
+});
+
+test('generateVideoScript lève une erreur si le script reste invalide après 3 essais', async () => {
   const plan = planBon();
   const mauvais = scriptBon(plan);
   mauvais.scenes = mauvais.scenes.slice(0, 3);
-  await assert.rejects(generateVideoScript(ARTICLE, plan, { appelerModele: async () => JSON.stringify(mauvais) }), /Script invalide après reprise/);
+  await assert.rejects(generateVideoScript(ARTICLE, plan, { appelerModele: async () => JSON.stringify(mauvais) }), /Script invalide après 3 essais/);
 });
 
 test('test de compréhension : le testeur ne reçoit ni l\'article ni le plan ; réussite', async () => {
@@ -227,11 +250,90 @@ test('generate-video.js : plan avant le script, test de compréhension avant l\'
   const corps = src.slice(src.indexOf('async function generateLinkedInVideo'), src.indexOf('function generateCaption'));
   const iPlan = corps.indexOf('await genererPlanEditorial(article)');
   const iEcrit = corps.indexOf("'editorial-plan.json'");
-  const iScript = corps.indexOf('await generateVideoScript(article, plan');
+  const iScript = corps.indexOf('generateVideoScript(article, plan');
   const iTest = corps.indexOf('await tester()');
   const iMeta = corps.indexOf('const metadata');
   assert.ok(iPlan > 0 && iEcrit > iPlan && iScript > iEcrit, 'plan écrit et enregistré avant le script');
   assert.ok(iTest > iScript && iMeta > iTest, 'test de compréhension avant les métadonnées et l\'approbation');
   assert.match(corps, /'comprehension-test\.json'/);
   assert.ok(corps.indexOf("'RAPPORT.md'") > iTest, 'rapport (plan + test) écrit après le test');
+});
+
+test('script trop long : chaque scène trop longue est raccourcie à part, sans réécrire le reste', async () => {
+  const plan = planBon();
+  const long = scriptBon(plan);
+  long.scenes.find((x) => x.planRef === 'developpement.1').narration = Array(150).fill('détail').join(' ') + ' 51 sur 60.';
+  const prompts = [];
+  const script = await generateVideoScript(ARTICLE, plan, {
+    appelerModele: async (p) => {
+      prompts.push(p);
+      if (/Réécris cette narration/.test(p)) return JSON.stringify({ narration: 'Avec l\'image floue, le robot tente le geste dans 51 essais sur 60.' });
+      return JSON.stringify(long);
+    },
+  });
+  const reecritures = prompts.filter((p) => /Réécris cette narration/.test(p));
+  assert.ok(reecritures.some((p) => /détail détail/.test(p)), 'la scène trop longue est raccourcie');
+  assert.ok(reecritures.every((p) => !/Texte concret|planRef/.test(p)), 'un appel ne porte que sur une narration');
+  assert.match(script.scenes.find((x) => x.planRef === 'developpement.1').narration, /51 essais sur 60\.$/);
+  assert.equal(script.scenes.find((x) => x.planRef === 'appel').text, 'vive-lia.blogspot.com', 'texte à l\'écran inchangé');
+});
+
+test('plan : un texte à l\'écran de 7 mots est raccourci par une passe ciblée, puis vérifié (cas réel du 12 nov.)', async () => {
+  const p = planBon();
+  p.nuances[1].texte_ecran = 'Pas de risque documenté en usage réel';
+  const prompts = [];
+  const plan = await genererPlanEditorial(ARTICLE, {
+    appelerModele: async (q) => {
+      prompts.push(q);
+      if (/RACCOURCIS chaque texte d'écran/.test(q)) return JSON.stringify([{ i: 0, texte: 'Risque réel non documenté' }]);
+      return JSON.stringify(p);
+    },
+  });
+  assert.equal(prompts.length, 2, 'un appel pour le plan, un pour raccourcir');
+  assert.equal(plan.nuances[1].texte_ecran, 'Risque réel non documenté');
+});
+
+test('une réponse illisible (Markdown) compte comme un essai raté, pas comme un plantage', async () => {
+  const plan = planBon();
+  let n = 0;
+  const script = await generateVideoScript(ARTICLE, plan, {
+    appelerModele: async () => (n++ === 0 ? '**Voici le script** : *à venir*' : JSON.stringify(scriptBon(plan))),
+  });
+  assert.equal(script.scenes.length, lignesDuPlan(plan).length);
+  let m = 0;
+  const p = await genererPlanEditorial(ARTICLE, { appelerModele: async () => (m++ === 0 ? '* pas du JSON' : JSON.stringify(planBon())) });
+  assert.equal(p.appel.adresse_blog, 'vive-lia.blogspot.com');
+});
+
+test('une nuance chiffrée prend la source principale de l\'étude', async () => {
+  const plan = planBon();
+  const s = scriptBon(plan);
+  s.scenes.find((x) => x.planRef === 'nuance.1').text = '1 seul robot, en labo';
+  assert.ok(!contient(validerScript(s, plan), /chiffre à l'écran sans source/));
+  const script = await generateVideoScript(ARTICLE, plan, { appelerModele: async () => JSON.stringify(s) });
+  assert.match(script.scenes.find((x) => x.planRef === 'nuance.1').source, /Perceptual Attacks on Embodied AI/);
+});
+
+test('corrections mécaniques : « nuances.1 » devient « nuance.1 », la scène sources affiche « Sources : … et N autres »', async () => {
+  const plan = planBon();
+  const s = scriptBon(plan);
+  s.scenes.find((x) => x.planRef === 'nuance.1').planRef = 'nuances.1';
+  s.scenes.find((x) => x.planRef === 'sources').text = 'Sources';
+  const script = await generateVideoScript(ARTICLE, plan, { appelerModele: async () => JSON.stringify(s) });
+  assert.ok(script.scenes.some((x) => x.planRef === 'nuance.1'));
+  assert.equal(script.scenes.find((x) => x.planRef === 'sources').text, 'Sources : Robocurve et 1 autre');
+});
+
+test('une citation inventée n\'apparaît jamais à l\'écran : le visuel devient un titre (cas réel du 12 nov.)', async () => {
+  const plan = planBon();
+  const s = scriptBon(plan);
+  s.scenes.find((x) => x.planRef === 'nuance.2').visuel = { type: 'citation', texte: 'Le problème est identifié. Comment le résoudre ?', auteur: 'Question ouverte' };
+  const vraie = scriptBon(plan);
+  vraie.scenes.find((x) => x.planRef === 'nuance.2').visuel = { type: 'citation', texte: 'la pointe pénètre l\'objet', auteur: 'Robocurve' };
+  const article = { ...ARTICLE, content: 'Le robot avance « la pointe pénètre l\'objet », écrit Robocurve.' };
+  const { validerVisuels } = require('../scripts/generate-script-dynamic');
+  assert.ok(contient(validerVisuels(s, plan, article), /citation absente de l'article/));
+  assert.deepEqual(validerVisuels(vraie, plan, article), []);
+  const script = await generateVideoScript(article, plan, { appelerModele: async () => JSON.stringify(s) });
+  assert.deepEqual(script.scenes.find((x) => x.planRef === 'nuance.2').visuel, { type: 'titre' });
 });

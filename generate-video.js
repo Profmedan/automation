@@ -6,22 +6,23 @@
  */
 
 require('dotenv').config();
+// Règle du 12 nov. 2026 : aucun service payant sauf Claude. Le garde arrête le générateur avant tout autre appel.
+const { installerGarde } = require('./scripts/local/services-payants');
+installerGarde();
 const fsExtra = require('fs');
 const fs = fsExtra.promises;
 const path = require('path');
 const { generateVideoScript } = require('./scripts/generate-script-dynamic'); // Script écrit depuis le plan éditorial
 const { genererPlanEditorial, rapportVideo } = require('./scripts/editorial-plan');
 const { testerComprehension } = require('./scripts/comprehension-test');
-const { generateVoiceoverWithFallback } = require('./scripts/generate-voiceover-fallback');
-const { renderDynamicVideo } = require('./scripts/render-video-dynamic'); // Nouveau render
+const { genererVoixLocale } = require('./scripts/local/voix-locale'); // voix clonée, Chatterbox hors réseau
+const { rendreVideoLocale } = require('./scripts/local/rendu-hyperframes'); // scènes en code, avatar, mixage
+const { usageClaude } = require('./scripts/editorial-plan');
 const FormData = require('form-data');
 const axios = require('axios');
 
 // Configuration
 const CONFIG = {
-  openaiKey: process.env.OPENAI_API_KEY,
-  elevenLabsKey: process.env.ELEVENLABS_API_KEY,
-  voiceId: process.env.ELEVENLABS_VOICE_ID,
   outputPath: process.env.VIDEO_OUTPUT_PATH || path.join(__dirname, '..', 'linkedin-videos'),
 };
 
@@ -58,8 +59,19 @@ async function hydrateArticleFromStatus(article) {
  * Génère une vidéo LinkedIn à partir d'un article
  * @param {Object} article - Objet article {title, content, url}
  */
+/** Texte complet de l'article pour le plan éditorial (les articles du blog n'ont pas de champ « content »). */
+function contenuArticle(article) {
+  if (article.content) return article.content;
+  const sansHtml = (h) => String(h || '').replace(/<\/(p|h[1-6]|li)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  const sources = (article.sources || []).map((x) => `- « ${x.titre || x.title} », ${x.media || x.auteur || ''} ${x.url || ''}`.trim()).join('\n');
+  return [sansHtml(article.introduction), sansHtml(article.body), sansHtml(article.conclusion), sources ? `SOURCES CITÉES PAR L'ARTICLE :\n${sources}` : '']
+    .filter(Boolean).join('\n\n');
+}
+
 async function generateLinkedInVideo(article) {
   await hydrateArticleFromStatus(article);
+  article.content = contenuArticle(article);
+  if (article.content.length < 500) throw new Error(`Article trop court ou vide (${article.content.length} caractères) : pas de plan éditorial possible.`);
   console.log('🎬 Début génération vidéo LinkedIn...');
   console.log(`📝 Article: ${article.title}`);
 
@@ -78,90 +90,58 @@ async function generateLinkedInVideo(article) {
     console.log(`✅ Plan éditorial validé (${plan.developpement.length} sous-idées, ${plan.sources.length} source(s))`);
 
     // ÉTAPES 1 à 3, refaites une fois avec les manques si le test de compréhension échoue
+    const temps = {};
+    const chrono = async (nom, f) => { const t = Date.now(); const r = await f(); temps[nom] = (temps[nom] || 0) + (Date.now() - t) / 1000; return r; };
+    let rendu = null;
+    let calage = null;
     const produire = async (consignes = []) => {
       // ÉTAPE 1: Script écrit scène par scène depuis le plan
-      console.log('\\n📄 Génération du script vidéo...');
-      const videoScript = await generateVideoScript(article, plan, { consignes });
-      console.log(`✅ Script généré (${videoScript.duration}s estimé)`);
-      await fs.writeFile(
-        path.join(videoFolder, 'script.json'),
-        JSON.stringify(videoScript, null, 2)
-      );
+      console.log('\n📄 Génération du script vidéo...');
+      const videoScript = await chrono('script', () => generateVideoScript(article, plan, { consignes }));
+      await fs.writeFile(path.join(videoFolder, 'script.json'), JSON.stringify(videoScript, null, 2));
 
-      // ÉTAPE 2: Générer la voix-off (ElevenLabs avec fallback)
-      console.log('\\n🎙️  Génération de la voix-off...');
-      const audioPath = await generateVoiceoverWithFallback(
-        videoScript.narration,
-        CONFIG.voiceId,
-        path.join(videoFolder, 'voiceover.mp3')
-      );
-      console.log(`✅ Voix-off générée: ${audioPath}`);
-    
-      // ÉTAPE 2.5: Synchroniser les durées de scènes avec l'audio réel
-      const { execSync } = require('child_process');
-      const ffprobeCommand = `"${FFPROBE_PATH}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`;
-      let audioDuration = videoScript.duration; // Default fallback
-    
-      try {
-        audioDuration = parseFloat(
-          execSync(ffprobeCommand)
-            .toString()
-            .trim()
-        );
-      } catch (error) {
-        console.log(`   ⚠️  Impossible de lire la durée audio (ffprobe indisponible), utilisation de la durée estimée: ${videoScript.duration}s`);
-      }
-    
-      // Calculer la durée totale actuelle du script
-      const scriptTotalDuration = videoScript.scenes.reduce((sum, scene) => sum + scene.duration, 0);
-    
-      console.log(`\\n⚖️  Synchronisation durées:`);
-      console.log(`   Audio: ${audioDuration.toFixed(2)}s`);
-      console.log(`   Script original: ${scriptTotalDuration}s`);
-    
-      // Ajuster proportionnellement toutes les durées de scènes
-      const adjustmentRatio = audioDuration / scriptTotalDuration;
-      videoScript.scenes = videoScript.scenes.map(scene => ({
-        ...scene,
-        duration: Math.max(2, scene.duration * adjustmentRatio) // Minimum 2s par scène
-      }));
-    
-      // Recalculer la durée totale ajustée
-      const adjustedTotalDuration = videoScript.scenes.reduce((sum, scene) => sum + scene.duration, 0);
-      videoScript.duration = adjustedTotalDuration;
-    
-      console.log(`   Après ajustement: ${adjustedTotalDuration.toFixed(2)}s`);
-      console.log(`   ✅ Synchronisé !`);
+      // ÉTAPE 2: Voix clonée en local (Chatterbox, Docker sans réseau), réécoutée par Whisper local
+      console.log('\n🎙️  Voix clonée (Chatterbox, hors réseau)...');
+      calage = await chrono('voix', () => genererVoixLocale(
+        videoScript.scenes.map((sc, i) => ({ id: `s${i}`, narration: sc.narration })),
+        videoFolder,
+        { adresseBlog: videoScript.blogAddress },
+      ));
+      calage.journal.forEach((l) => console.log(`   ${l}`));
+      console.log(`✅ Voix : ${calage.duree.toFixed(1)} s (${calage.moteur})`);
 
-      // ÉTAPE 3: Render la vidéo dynamique (images + texte + sous-titres)
-      console.log('\\n🎬 Création de la vidéo dynamique...');
-      const videoPath = await renderDynamicVideo(
-        videoScript,
-        audioPath,
-        path.join(videoFolder, 'video.mp4'),
-        article.url // Passer le lien de l'article pour la scène finale
-      );
-      console.log(`✅ Vidéo créée: ${videoPath}`);
-      return { videoScript, videoPath };
+      // ÉTAPE 3: Scènes Hyperframes en code, avatar (Rhubarb), musique Mixkit et bruitages CC0
+      console.log('\n🎬 Rendu Hyperframes local...');
+      rendu = await chrono('rendu', () => rendreVideoLocale(videoScript, calage, videoFolder));
+      console.log(`✅ Vidéo créée : ${rendu.videoPath} (${rendu.duree.toFixed(1)} s, ${rendu.mesures.lufs} LUFS)`);
+      return { videoScript, videoPath: rendu.videoPath };
     };
 
     let { videoScript, videoPath } = await produire();
+    const produireCompte = { n: 1 };
 
     // ÉTAPE 3.5 (obligatoire) : test de compréhension sur le MP4 final, par un testeur qui n'a pas lu l'article
     console.log('\\n🧪 Test de compréhension...');
-    const tester = () => testerComprehension({
-      videoPath, srtPath: path.join(videoFolder, 'subtitles.srt'), texteSecours: videoScript.narration, plan, dossier: videoFolder,
-    });
+    const tester = () => chrono('test', () => testerComprehension({
+      videoPath, srtPath: rendu.srtPath, texteSecours: videoScript.narration, plan, dossier: videoFolder,
+    }));
     let comprehension = await tester();
     if (!comprehension.ok) {
       console.warn(`⚠️  Test de compréhension échoué :\\n- ${comprehension.manques.join('\\n- ')}\\n   → scènes refaites une fois`);
       await fs.writeFile(path.join(videoFolder, 'comprehension-test-1.json'), JSON.stringify(comprehension, null, 2));
       ({ videoScript, videoPath } = await produire(comprehension.manques.map((m) => `test de compréhension : ${m}`)));
+      produireCompte.n += 1;
       comprehension = await tester();
     }
     await fs.writeFile(path.join(videoFolder, 'comprehension-test.json'), JSON.stringify(comprehension, null, 2));
     // Rapport de la vidéo : plan éditorial + résultat du test, joints à chaque vidéo
-    await fs.writeFile(path.join(videoFolder, 'RAPPORT.md'), rapportVideo(plan, comprehension));
+    const production = {
+      duree_video_s: rendu.duree, productions: produireCompte.n, temps_s: temps, rendu_hyperframes_s: rendu.secondesRendu,
+      voix: calage.moteur, voix_journal: calage.journal, ressemblance_whisper: calage.scenes.map((x) => `${x.id} ${x.ressemblance}`),
+      son: rendu.mesures, musique: rendu.musique, claude: usageClaude(),
+    };
+    await fs.writeFile(path.join(videoFolder, 'production.json'), JSON.stringify(production, null, 2));
+    await fs.writeFile(path.join(videoFolder, 'RAPPORT.md'), rapportVideo(plan, comprehension, production));
     console.log(comprehension.ok ? '✅ Test de compréhension réussi' : `❌ Test de compréhension toujours échoué : ${comprehension.manques.join(' ; ')}`);
 
     // ÉTAPE 4: Générer les métadonnées LinkedIn
@@ -174,6 +154,7 @@ async function generateLinkedInVideo(article) {
       hashtags: extractHashtags(article),
       sources: plan.sources,
       comprehension: { ok: comprehension.ok, manques: comprehension.manques },
+      production: { duree_video_s: production.duree_video_s, temps_s: production.temps_s, cout_claude_usd: production.claude.cout_usd },
       videoPath: videoPath,
       timestamp: new Date().toISOString(),
     };
@@ -439,7 +420,7 @@ COMMANDES:
 }
 
 // Export pour utilisation en module
-module.exports = { generateLinkedInVideo, sendVideoForApproval };
+module.exports = { generateLinkedInVideo, sendVideoForApproval, contenuArticle };
 
 // Exécution CLI (seulement quand appelé directement)
 if (require.main === module) {

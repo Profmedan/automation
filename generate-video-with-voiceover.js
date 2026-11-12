@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Règle du 12 nov. 2026 : aucun service payant sauf Claude ; ce script ancien est désactivé.
+require('./scripts/local/services-payants').refuser('OpenAI / ElevenLabs (ancien générateur)');
 
 /**
  * LinkedIn Video Generator - Avec voix-off préexistante

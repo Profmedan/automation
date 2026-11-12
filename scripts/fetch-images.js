@@ -9,6 +9,7 @@
 const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
+const { refuser } = require('./local/services-payants');
 
 // API Keys
 const DEAPI_KEY = process.env.DEAPI_API_KEY;
@@ -19,6 +20,8 @@ const FAL_KEY = process.env.FAL_API_KEY;
  * Coût : ~0.04$ par image 1024x1024 standard quality
  */
 async function generateDalleImage(prompt) {
+  // Règle du 12 nov. 2026 : aucun service payant sauf Claude
+  refuser('OpenAI DALL-E (images)');
   try {
     console.log(`   🎨 DALL-E 3: "${prompt.substring(0, 50)}..."`);
 
@@ -60,6 +63,8 @@ async function generateDalleImage(prompt) {
  * Génère une image avec deAPI.ai (ZImageTurbo)
  */
 async function generateDeapiImage(prompt) {
+  // Règle du 12 nov. 2026 : aucun service payant sauf Claude
+  refuser('deAPI (images)');
   if (!DEAPI_KEY) {
     console.error('   ⚠️  DEAPI_API_KEY manquante dans .env');
     return null;
@@ -123,6 +128,8 @@ async function generateDeapiImage(prompt) {
  * Doc: https://docs.fal.ai/
  */
 async function generateFalImage(prompt) {
+  // Règle du 12 nov. 2026 : aucun service payant sauf Claude
+  refuser('fal.ai (images)');
   if (!FAL_KEY) {
     console.error('   ⚠️  FAL_API_KEY manquante dans .env');
     return null;

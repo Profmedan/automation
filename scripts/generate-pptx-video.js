@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Règle du 12 nov. 2026 : aucun service payant sauf Claude ; ce script ancien est désactivé.
+require('./local/services-payants').refuser('fal.ai (ancien générateur PPTX)');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');

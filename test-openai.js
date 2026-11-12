@@ -1,3 +1,5 @@
+// Règle du 12 nov. 2026 : aucun service payant sauf Claude ; ce script ancien est désactivé.
+require('./scripts/local/services-payants').refuser('OpenAI (test)');
 require('dotenv').config();
 const { OpenAI } = require('openai');
 

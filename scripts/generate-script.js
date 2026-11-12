@@ -1,3 +1,5 @@
+// Règle du 12 nov. 2026 : aucun service payant sauf Claude ; ce script ancien est désactivé.
+require('./local/services-payants').refuser('OpenAI (ancien script, remplacé par generate-script-dynamic.js + Claude)');
 /**
  * Génère un script vidéo LinkedIn à partir d'un article
  * Utilise ChatGPT pour créer un résumé engageant de 2 minutes

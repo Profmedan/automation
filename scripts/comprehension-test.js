@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { lireJson, appelerClaude } = require('./editorial-plan');
+const { lireJson, appelerClaude, postClaude } = require('./editorial-plan');
 
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const MODELE = 'claude-haiku-4-5-20251001';
@@ -36,13 +36,8 @@ Réponds en JSON uniquement :
 async function appelerTesteurClaude(images, sousTitres) {
   const contenu = images.map((f) => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: fs.readFileSync(f).toString('base64') } }));
   contenu.push({ type: 'text', text: `SOUS-TITRES :\n${sousTitres}\n\n${CONSIGNE_TESTEUR}` });
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODELE, max_tokens: 1500, messages: [{ role: 'user', content: contenu }] }),
-  });
-  if (!response.ok) throw new Error(`Anthropic API erreur ${response.status}: ${await response.text()}`);
-  return (await response.json()).content[0].text;
+  const data = await postClaude({ model: MODELE, max_tokens: 1500, messages: [{ role: 'user', content: contenu }] });
+  return data.content[0].text;
 }
 
 function normaliserHote(v) {

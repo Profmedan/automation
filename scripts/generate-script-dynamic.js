@@ -7,13 +7,31 @@
  * spectateur comprend ; la narration est la suite des narrations de scènes, sans réécriture.
  */
 const {
-  validerPlanEditorial, genererPlanEditorial, lignesDuPlan, mots, lireJson, appelerClaude, estMotAbstraitSeul, hoteDuBlog, libelleSource, MAX_MOTS_ECRAN,
+  validerPlanEditorial, genererPlanEditorial, lignesDuPlan, mots, lireJson, appelerClaude, estMotAbstraitSeul, hoteDuBlog, libelleSource, MAX_MOTS_ECRAN, ESSAIS, raccourcirTextesEcran,
 } = require('./editorial-plan');
+const { TYPES_VISUELS, validerVisuel } = require('./local/scenes-visuelles');
+
+// Voix clonée mesurée le 12 nov. 2026 : 165 mots → 77 s de parole, soit ≈ 2,1 mots par seconde.
+// 85 à 115 mots tiennent en 45 à 57 s avec les silences (règle des Reels : moins de 60 s).
+const MOTS_MIN = 85;
+const MOTS_MAX = 115;
+const STYLE = 'Style oral, en phrases complètes et naturelles (articles, verbes conjugués) : jamais de style télégraphique. Pour tenir le budget, supprime des idées secondaires, pas des petits mots.';
 
 const TYPE_VISUEL = { accroche: 'hook', idee_principale: 'stat', developpement: 'visual', nuance: 'split', conclusion: 'quote', appel: 'cta', sources: 'cta' };
 
 function typeDeLigne(ref) {
   return ref.split('.')[0];
+}
+
+/** Mots dits par scène pour tenir 50 à 60 s (≈ 2,9 mots par seconde) ; les sous-idées prennent le reste. */
+function budgetsMots(plan) {
+  const b = { accroche: 9, idee_principale: 11, conclusion: 13, appel: 8, sources: 6 };
+  (plan.nuances || []).forEach((_, i) => { b[`nuance.${i + 1}`] = 10; });
+  const fixe = Object.values(b).reduce((x, y) => x + y, 0);
+  const dev = (plan.developpement || []).length || 1;
+  const parSousIdee = Math.floor((MOTS_MAX - 5 - fixe) / dev);
+  (plan.developpement || []).forEach((_, i) => { b[`developpement.${i + 1}`] = parSousIdee; });
+  return b;
 }
 
 function promptScript(article, plan, erreursPrecedentes = []) {
@@ -30,6 +48,8 @@ ${JSON.stringify(plan, null, 2)}
 
 RÈGLES DES SCÈNES :
 - Une scène par ligne du plan, dans cet ordre : ${lignesDuPlan(plan).join(', ')}. Chaque scène porte "planRef" = le nom de sa ligne.
+- ${STYLE}
+- BUDGET DE MOTS DITS PAR SCÈNE (à respecter, compte les mots) : ${Object.entries(budgetsMots(plan)).map(([k, v]) => `${k} ${v}`).join(', ')}. Total ${MOTS_MIN} à ${MOTS_MAX} mots. Le plan est plus détaillé que la vidéo : garde l'essentiel de chaque ligne (l'affirmation, le pourquoi en une proposition, la preuve chiffrée).
 - Chaque scène répond à : « qu'est-ce que le spectateur comprend ici ? » (champ "comprend").
 - Interdit : une scène composée seulement d'un mot abstrait, d'une icône décorative ou d'une transition sans contenu.
 - Le texte à l'écran ("text", ${MAX_MOTS_ECRAN} mots au maximum, qui a du sens seul) et la voix ("narration") disent la même idée : l'écran résume, la voix explique.
@@ -37,17 +57,25 @@ RÈGLES DES SCÈNES :
 - Toute scène qui affiche un chiffre a "source" = le titre de la source de ce chiffre (affiché à l'écran sous le texte).
 - Nuances : chacune dite concrètement (« l'étude ne porte que sur… »), jamais « Nuances » ou « Limites » seul.
 - Scène "appel" : la voix dit l'adresse du blog (${plan.appel && plan.appel.adresse_blog}) et l'écran l'affiche.
-- Scène "sources" : la voix et l'écran nomment le titre et l'auteur de chaque source.
-- Minutage : accroche 0–3 s, idée principale 3–8 s, sous-idées 8–42 s, nuances 42–50 s, conclusion 50–55 s, appel et sources 55–60 s. Environ 150 mots dits en tout.
+- Scène "sources" : la voix nomme la source principale en quelques mots (ex. « Source : l'étude de Robocurve. ») ; la liste complète (titre et auteur) s'affiche automatiquement.
+- Minutage : accroche 0–3 s, idée principale 3–8 s, sous-idées 8–42 s, nuances 42–50 s, conclusion 50–55 s, appel et sources 55–60 s.
 - La première scène commence directement par l'accroche (pas de « Bonjour »).
 
-RÈGLES VISUELS (imagePrompt en anglais) : l'image MONTRE l'idée de la scène (schéma, comparaison, objet concret du plan, champ "visuel"), jamais un simple décor ; ajoute toujours "no text, no words, no letters, no writing".
+VISUELS : aucune image n'est générée. Chaque scène (sauf "appel" et "sources", dessinées automatiquement) choisit dans "visuel" un schéma dessiné en code qui MONTRE l'idée (champ "visuel" du plan), jamais un simple décor :
+- {"type": "compteur", "valeur": 51, "sur": 60, "unite": "", "libelle": "tentatives avec l'image floue"}  (libellé ≤ 8 mots ; "sur" et "unite" facultatifs)
+- {"type": "barres", "unite": "%", "donnees": [{"libelle": "Image nette", "valeur": 27}, {"libelle": "Image floue", "valeur": 87.7}]}  (2 à 4 barres, libellés ≤ 4 mots)
+- {"type": "comparaison", "gauche": {"titre": "Ce que voit l'IA", "texte": "une pomme"}, "droite": {"titre": "La vraie scène", "texte": "une poupée"}}  (titres ≤ 4 mots, textes ≤ 10 mots ; à droite, ce qui surprend)
+- {"type": "etapes", "etapes": ["L'IA annonce « j'ai fini »", "Un modèle testé juge", "Personne ne vérifie"]}  (2 à 4 étapes de ≤ 7 mots)
+- {"type": "citation", "texte": "…", "auteur": "…"}  (≤ 25 mots, citation exacte de l'article)
+- {"type": "titre"}  (seulement le texte à l'écran, en grand)
+Tout nombre d'un visuel doit figurer dans le plan éditorial : aucun chiffre inventé.
+LONGUEUR : ${MOTS_MIN} à ${MOTS_MAX} mots dits en tout (vidéo de moins de 60 s).
 ${reprise}
 Réponds en JSON UNIQUEMENT, sans markdown :
 {
   "title": "${String(article.title || '').replace(/"/g, '\\"')}",
   "scenes": [
-    { "id": 1, "planRef": "accroche", "comprend": "...", "narration": "...", "text": "6 mots max", "source": "", "duration": 3, "imagePrompt": "..." }
+    { "id": 1, "planRef": "accroche", "comprend": "...", "narration": "...", "text": "6 mots max", "source": "", "duration": 3, "visuel": { "type": "titre" } }
   ],
   "hashtags": ["#IA"]
 }`;
@@ -58,12 +86,79 @@ function sourceDuPlan(ref, plan) {
   const m = /^developpement\.(\d+)$/.exec(ref || '');
   if (m) return ((plan.developpement || [])[Number(m[1]) - 1] || {}).source || '';
   if (ref === 'accroche') return (plan.accroche || {}).source || '';
+  // Une limite de l'étude (« un seul robot ») vient de l'étude elle-même : la source principale
+  if (/^nuance\./.test(ref || '')) return ((plan.sources || [])[0] || {}).titre || '';
   return '';
+}
+
+/**
+ * Corrections mécaniques, sans appel au modèle : « nuances.1 » → « nuance.1 », et texte à l'écran de la scène
+ * « sources » fixé (« Sources : Robocurve et 2 autres ») ; la liste complète s'affiche dessous.
+ */
+function normaliserScenes(script, plan) {
+  for (const sc of script.scenes || []) {
+    sc.planRef = String(sc.planRef || '').trim()
+      .replace(/^nuances\./, 'nuance.').replace(/^d[ée]veloppements?\./, 'developpement.').replace(/^id[ée]e[_ ]principale$/, 'idee_principale');
+    if (sc.planRef === 'sources') {
+      const p = (plan.sources || [])[0] || {};
+      const nom = String(p.auteur || p.titre || '').replace(/\s*\(.*\)\s*/, ' ').split(/[,;]/)[0].trim().split(/\s+/).slice(0, 3).join(' ');
+      const autres = (plan.sources || []).length - 1;
+      sc.text = nom ? `Sources : ${nom}${autres > 0 ? ` et ${autres} autre${autres > 1 ? 's' : ''}` : ''}` : sc.text;
+    }
+  }
+}
+
+function motsDits(script) {
+  return (script.scenes || []).reduce((n, sc) => n + mots(sc.narration).length, 0);
+}
+
+/**
+ * Raccourcit, une par une, les narrations qui dépassent leur budget : un petit appel par scène
+ * (« réécris en N mots au plus, phrases complètes »), vérifié aussitôt, jusqu'à 3 tentatives par scène.
+ * Le 12 nov. 2026, un seul appel pour 10 scènes à la fois ne raccourcissait presque rien (193 → 190 mots).
+ */
+async function condenserNarrations(script, plan, appeler, marge = 2) {
+  const budgets = budgetsMots(plan);
+  for (const sc of script.scenes || []) {
+    const budget = budgets[sc.planRef] || 10;
+    for (let k = 1; k <= 3 && mots(sc.narration).length > budget + marge; k++) {
+      const prompt = `LANGUE : français. Réécris cette narration de vidéo en ${budget} mots AU MAXIMUM (compte-les un par un).
+${STYLE}
+Garde l'idée principale, les chiffres, les noms propres et l'adresse du blog s'il y en a une ; n'ajoute aucun fait.
+NARRATION (${mots(sc.narration).length} mots) : ${sc.narration}
+Réponds en JSON UNIQUEMENT : {"narration": "..."}`;
+      let r = null;
+      try {
+        r = lireJson(await appeler(prompt, 'Tu es secrétaire de rédaction. Tu raccourcis sans trahir. JSON valide uniquement.'));
+      } catch (e) {
+        if (e && e.name === 'ServicePayantBloque') throw e;
+        continue; // réponse illisible (Markdown au lieu du JSON) : tentative suivante
+      }
+      const nouvelle = String((r && r.narration) || '').trim();
+      if (nouvelle && mots(nouvelle).length < mots(sc.narration).length) sc.narration = nouvelle;
+    }
+  }
 }
 
 /**
  * Vérifie le script contre le plan. Renvoie la liste des erreurs (vide si le script est bon).
  */
+const sansPonctuation = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** Visuels des scènes (sauf appel et sources, dessinés automatiquement). Une citation doit être dans l'article, mot pour mot. */
+function validerVisuels(script, plan, article = {}) {
+  const textePlan = JSON.stringify(plan);
+  const texteArticle = sansPonctuation(`${article.content || ''} ${textePlan}`);
+  return (script.scenes || []).flatMap((s, i) => {
+    if (['appel', 'sources'].includes(s.planRef)) return [];
+    const e = validerVisuel(s.visuel, `scène ${i + 1}`, textePlan);
+    if (s.visuel && s.visuel.type === 'citation' && !texteArticle.includes(sansPonctuation(s.visuel.texte))) {
+      e.push(`scène ${i + 1} : citation absente de l'article (« ${s.visuel.texte} ») : une citation est reprise mot pour mot, jamais inventée`);
+    }
+    return e;
+  });
+}
+
 function validerScript(script, plan) {
   const erreurs = [];
   const scenes = Array.isArray(script && script.scenes) ? script.scenes : [];
@@ -86,6 +181,9 @@ function validerScript(script, plan) {
     }
   });
   for (const l of lignes) if (!vues.has(l)) erreurs.push(`ligne du plan sans scène : ${l}`);
+  const total = scenes.reduce((n, s) => n + mots(s.narration).length, 0);
+  if (total > MOTS_MAX) erreurs.push(`narration de ${total} mots : ${MOTS_MAX} au maximum pour rester sous 60 s`);
+  if (total < MOTS_MIN) erreurs.push(`narration de ${total} mots : au moins ${MOTS_MIN} pour expliquer chaque idée`);
   if (scenes[0] && scenes[0].planRef !== 'accroche') erreurs.push('la première scène doit être l\'accroche');
 
   const adresse = plan.appel && plan.appel.adresse_blog;
@@ -93,10 +191,20 @@ function validerScript(script, plan) {
   if (adresse && appel.length && !appel.some((s) => `${s.narration} ${s.text}`.toLowerCase().includes(adresse.toLowerCase().split('.')[0]))) {
     erreurs.push(`scène appel : l'adresse du blog (${adresse}) n'est ni dite ni affichée`);
   }
-  const sourcesScene = scenes.filter((s) => s.planRef === 'sources').map((s) => `${s.narration} ${s.text}`.toLowerCase()).join(' ');
-  for (const src of plan.sources || []) {
-    const nom = String(src.auteur || src.titre || '').toLowerCase().split(/[\s,]+/).find((m) => m.length > 3);
-    if (nom && !sourcesScene.includes(nom)) erreurs.push(`scène sources : « ${src.auteur || src.titre} » n'est pas nommé`);
+  // La liste complète des sources (titre et auteur) est affichée automatiquement sur la scène « sources » ;
+  // la voix nomme au moins la source principale.
+  const voixSources = scenes.filter((s) => s.planRef === 'sources').map((s) => `${s.narration} ${s.text}`.toLowerCase()).join(' ');
+  const principale = (plan.sources || [])[0];
+  if (principale) {
+    const cles = `${principale.auteur || ''} ${principale.titre || ''}`.toLowerCase().split(/[\s,()]+/).filter((m) => m.length > 3);
+    if (cles.length && !cles.some((m) => voixSources.includes(m))) erreurs.push(`scène sources : la source principale (« ${principale.titre} », ${principale.auteur}) n'est pas nommée`);
+  }
+  // Budget de mots par scène : indiqué au modèle quand la narration est trop longue
+  if (total > MOTS_MAX) {
+    const budgets = budgetsMots(plan);
+    const trop = scenes.map((s, i) => ({ i, n: mots(s.narration).length, b: budgets[s.planRef] }))
+      .filter((x) => x.b && x.n > x.b + 3).map((x) => `scène ${x.i + 1} : ${x.n} mots pour un budget de ${x.b}`);
+    if (trop.length) erreurs.push(`scènes trop longues à raccourcir : ${trop.join(' ; ')}`);
   }
   return erreurs;
 }
@@ -114,16 +222,48 @@ async function generateVideoScript(article, plan, options = {}) {
 
   const appeler = options.appelerModele || ((p, s) => appelerClaude(p, s, 4096));
   const system = 'Tu es scénariste vidéo. Tu suis le plan éditorial ligne par ligne. Réponds TOUJOURS en JSON valide uniquement, sans markdown.';
-  let erreurs = [...(options.consignes || [])];
+  // Consignes (ex. manques du test de compréhension) et erreurs déjà vues restent dans chaque reprise
+  const vues = [...(options.consignes || [])];
+  let erreurs = [];
   let script;
-  for (let essai = 1; essai <= 2; essai++) {
-    console.log(`⏱️  Script depuis le plan éditorial (essai ${essai})...`);
-    script = lireJson(await appeler(promptScript(article, plan, erreurs), system));
-    erreurs = validerScript(script, plan);
+  for (let essai = 1; essai <= ESSAIS; essai++) {
+    console.log(`⏱️  Script depuis le plan éditorial (essai ${essai}/${ESSAIS})...`);
+    try {
+      script = lireJson(await appeler(promptScript(article, plan, vues), system));
+    } catch (e) {
+      if (e && e.name === 'ServicePayantBloque') throw e;
+      erreurs = [`réponse illisible (${e.message}) : JSON seul, sans Markdown`];
+      erreurs.forEach((x) => { if (!vues.includes(x)) vues.push(x); });
+      console.warn(`⚠️  Script illisible (essai ${essai}/${ESSAIS}) : ${e.message}`);
+      script = { scenes: [] };
+      continue;
+    }
+    // Haiku suit mal un budget de mots en écrivant tout le script : une passe ciblée raccourcit les narrations
+    normaliserScenes(script, plan);
+    if (motsDits(script) > MOTS_MAX) {
+      const avant = motsDits(script);
+      await condenserNarrations(script, plan, appeler);
+      // Encore trop long : second tour, sans marge, sur les scènes au-dessus de leur budget
+      if (motsDits(script) > MOTS_MAX) await condenserNarrations(script, plan, appeler, 0);
+      console.log(`✂️  Narration raccourcie scène par scène : ${avant} → ${motsDits(script)} mots`);
+    }
+    await raccourcirTextesEcran((script.scenes || []).filter((sc) => typeof sc.text === 'string').map((cible) => ({ cible, champ: 'text' })), appeler);
+    erreurs = [...validerScript(script, plan), ...validerVisuels(script, plan, article)];
     if (erreurs.length === 0) break;
-    console.warn(`⚠️  Script refusé (essai ${essai}) :\n- ${erreurs.join('\n- ')}`);
+    erreurs.forEach((e) => { if (!vues.includes(e)) vues.push(e); });
+    console.warn(`⚠️  Script refusé (essai ${essai}/${ESSAIS}) :\n- ${erreurs.join('\n- ')}`);
   }
-  if (erreurs.length) throw new Error(`Script invalide après reprise : ${erreurs.join(' ; ')}`);
+  const bloquantes = validerScript(script, plan);
+  if (bloquantes.length) throw new Error(`Script invalide après ${ESSAIS} essais : ${bloquantes.join(' ; ')}`);
+  // Un visuel encore invalide après reprise devient un simple titre (jamais un chiffre inventé à l'écran)
+  script.scenes.forEach((s, i) => {
+    if (['appel', 'sources'].includes(s.planRef)) return;
+    const e = validerVisuels({ scenes: [s] }, plan, article).map((x) => x.replace('scène 1', `scène ${i + 1}`));
+    if (e.length) {
+      console.warn(`⚠️  ${e.join(' ; ')} → visuel remplacé par le texte à l'écran seul`);
+      s.visuel = { type: 'titre' };
+    }
+  });
 
   script.scenes = script.scenes.map((s, i) => ({
     ...s,
@@ -150,4 +290,4 @@ async function generateVideoScript(article, plan, options = {}) {
   return script;
 }
 
-module.exports = { generateVideoScript, validerScript, promptScript };
+module.exports = { generateVideoScript, validerScript, validerVisuels, promptScript, budgetsMots, condenserNarrations, MOTS_MIN, MOTS_MAX };

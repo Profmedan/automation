@@ -10,6 +10,7 @@ const { argumentsSlide } = require('./texte-ecran');
 const fs = require('fs').promises;
 const path = require('path');
 const { generateVideoImages } = require('./fetch-images');
+const { refuser } = require('./local/services-payants');
 
 const FFMPEG_PATH = '/usr/local/Caskroom/mambaforge/base/bin/ffmpeg';
 
@@ -96,6 +97,8 @@ async function correctSubtitles(srtPath) {
 }
 
 async function generateSubtitles(audioPath, outputSrtPath) {
+  // Règle du 12 nov. 2026 : aucun service payant sauf Claude
+  refuser('OpenAI Whisper API (sous-titres)');
   console.log('📝 Génération sous-titres (Whisper)...');
   
   try {

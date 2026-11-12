@@ -27,12 +27,12 @@ function scriptAvecChiffres(plan) {
       comprend: `ce que montre ${ref}`,
       narration: ref === 'appel' ? plan.appel.texte_voix
         : ref === 'sources' ? 'Sources : Robocurve, Perceptual Attacks on Embodied AI ; et l\'article de Vive l\'IA.'
-          : `Narration concrète de ${ref}.`,
+          : `Narration concrète de ${ref} : une idée précise et vérifiable.`,
       text: ref === 'appel' ? 'vive-lia.blogspot.com' : ref === 'sources' ? 'Robocurve · Vive l\'IA'
         : ref === 'developpement.1' ? 'Flou : 51 sur 60' : 'Texte concret de scène',
       source: '',
       duration: 4,
-      imagePrompt: 'diagram, no text, no words, no letters, no writing',
+      visuel: { type: 'titre' },
     })),
   };
 }

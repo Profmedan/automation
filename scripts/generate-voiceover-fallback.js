@@ -5,6 +5,7 @@
 const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
+const { refuser } = require('./local/services-payants');
 
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
 
@@ -16,26 +17,16 @@ const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
  * @returns {string} Chemin du fichier audio généré
  */
 async function generateVoiceoverWithFallback(text, voiceId, outputPath) {
-  // Essayer ElevenLabs d'abord
-  try {
-    if (process.env.ELEVENLABS_API_KEY && voiceId) {
-      console.log('   📍 Tentative ElevenLabs...');
-      return await generateVoiceoverElevenLabs(text, voiceId, outputPath);
-    }
-  } catch (error) {
-    console.log(`   ⚠️  ElevenLabs échoué: ${error.message}`);
-    console.log('   📍 Fallback vers Google Cloud TTS...');
-  }
-
-  // Fallback: Edge TTS
-  console.log('   📍 Fallback vers Edge TTS...');
-  return await generateVoiceoverEdgeTTS(text, outputPath);
+  // Règle du 12 nov. 2026 : plus d'ElevenLabs ; le générateur utilise scripts/local/voix-locale.js (voix clonée)
+  refuser('ElevenLabs (voix) — utiliser scripts/local/voix-locale.js');
 }
 
 /**
  * ElevenLabs API call
  */
 async function generateVoiceoverElevenLabs(text, voiceId, outputPath) {
+  // Règle du 12 nov. 2026 : aucun service payant sauf Claude
+  refuser('ElevenLabs (voix)');
   const response = await axios.post(
     `${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`,
     {
@@ -68,6 +59,8 @@ async function generateVoiceoverElevenLabs(text, voiceId, outputPath) {
  * Google Cloud TTS API call
  */
 async function generateVoiceoverGoogleTTS(text, outputPath) {
+  // Règle du 12 nov. 2026 : aucun service payant sauf Claude
+  refuser('Google Cloud Text-to-Speech (voix)');
   const textToSpeech = require('@google-cloud/text-to-speech');
   const client = new textToSpeech.TextToSpeechClient();
 
