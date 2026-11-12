@@ -211,16 +211,15 @@ Après ma programmation initiale sur OpenClaw (orchestrateur IA open-source) + C
 5️⃣ Publication blog — Publié sur Blogger + sauvegarde Google Drive + email
 6️⃣ Plan éditorial — Idée principale, accroche, sous-idées avec preuves, limites, conclusion et sources, tirés de l'article et vérifiés avant le script
 7️⃣ Script et narration — Une scène par ligne du plan, écrite par Claude Haiku (Anthropic), puis test de compréhension sur la vidéo finale
-8️⃣ Voix-off — Narration avec ma voix clonée via ElevenLabs
-9️⃣ Images vidéo — Visuels générés par DALL-E 3 + Fal.ai (FLUX Schnell), ou remplacés par mes propres photos/vidéos via Telegram
-🔟 Montage — Vidéo assemblée avec sous-titres automatiques (Whisper) via ffmpeg
-1️⃣1️⃣ Approbation vidéo — Preview sur Drive, j'approuve ou je remplace des scènes depuis mon iPhone
+8️⃣ Voix-off — Ma voix clonée, calculée sur mon Mac (Chatterbox, logiciel libre), puis réécoutée par Whisper en local
+9️⃣ Visuels vidéo — Schémas, chiffres et graphiques animés dessinés en code, avec mon avatar : aucune image générée
+🔟 Montage — Sous-titres calés mot à mot (Whisper en local), musique Mixkit et bruitages libres, assemblage Hyperframes + ffmpeg
+1️⃣1️⃣ Approbation vidéo — Preview sur Telegram, j'approuve ou je remplace des scènes depuis mon iPhone
 1️⃣2️⃣ Publication LinkedIn — Uniquement après approbation explicite
 
-💰 Coût par vidéo : ~0.35$
-- GPT-4o (article + script) : ~0.08$
-- DALL-E 3 / deAPI.ai (image blog + images vidéo) : ~0.18$
-- ElevenLabs (voix-off) : ~0.09$
+💰 Coûts
+- Vidéo : ~0.06 à 0.11$ (Claude Haiku : plan, script, test de compréhension). Voix, visuels, sous-titres et montage : outils gratuits sur mon Mac
+- Blog : GPT-4o (article) + DALL-E 3 / deAPI.ai (image), au plus ~0.26$
 
 Abonnements : Claude Pro (~14.5€/mois) + OpenAI (~20$/mois)
 
