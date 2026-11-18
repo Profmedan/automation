@@ -1,0 +1,14 @@
+[
+  {
+    "repo": "bestuserever121/vox-explainer",
+    "url": "https://github.com/bestuserever121/vox-explainer",
+    "commit": "e00257776b8291dad1846a5848337443a49ee37f",
+    "path": "SKILL.md",
+    "license": "MIT",
+    "adaptation": "Règles textuelles et références ; moteur Hyperframes/GSAP local, aucun exécutable upstream.",
+    "statut": "actif",
+    "fichiers_references": [
+      "docs/laufzeit.md"
+    ]
+  }
+]

@@ -1,0 +1,4 @@
+interface:
+  display_name: "iArt Motion · vidéo"
+  short_description: "Ressources motion locales pour les vidéos Vive l’IA"
+  default_prompt: "Utilise $iart-motion-video pour fabriquer la vidéo demandée."

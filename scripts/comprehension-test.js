@@ -29,13 +29,14 @@ function texteSousTitres(srt) {
 }
 
 const CONSIGNE_TESTEUR = `Tu n'as pas lu l'article dont parle cette vidéo. Tu ne disposes que de ses images (une toutes les 2 s, dans l'ordre) et de ses sous-titres.
-Écris ce que tu as compris, sans rien inventer : si un élément n'apparaît pas, laisse-le vide.
+Écris ce que tu as compris, sans rien inventer : si un élément n’apparaît pas, laisse-le vide.
+Distingue les capacités actuelles des projets futurs. Dans ton résumé, précise qui prépare, qui autorise ou réalise l’action, et les conditions d’accès lorsqu’elles sont montrées. Relève les questions laissées ouvertes en conclusion. N’attribue jamais une action à un acteur différent de celui indiqué. Ces questions ne donnent aucune réponse : appuie-toi uniquement sur les images et sous-titres.
 Réponds en JSON uniquement :
 { "idee_principale": "une phrase", "sous_idees": ["..."], "conclusion": "...", "adresse_blog": "...", "sources": [ { "titre": "...", "auteur": "..." } ] }`;
 
-async function appelerTesteurClaude(images, sousTitres) {
+async function appelerTesteurClaude(images, sousTitres, pas=2) {
   const contenu = images.map((f) => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: fs.readFileSync(f).toString('base64') } }));
-  contenu.push({ type: 'text', text: `SOUS-TITRES :\n${sousTitres}\n\n${CONSIGNE_TESTEUR}` });
+  contenu.push({ type: 'text', text: `SOUS-TITRES :\n${sousTitres}\n\n${CONSIGNE_TESTEUR.replace('une toutes les 2 s',`une toutes les ${pas} s`)}` });
   const data = await postClaude({ model: MODELE, max_tokens: 1500, messages: [{ role: 'user', content: contenu }] });
   return data.content[0].text;
 }
@@ -64,7 +65,7 @@ function comparerFaits(reponse, plan) {
 }
 
 const CONSIGNE_JUGE = `Compare ce qu'un spectateur a compris d'une vidéo avec le plan éditorial de cette vidéo.
-Pour l'idée principale, chaque sous-idée et la conclusion du plan : "ok" si le spectateur en a retenu le sens (même avec d'autres mots), sinon "manque" ou "faux" avec une raison courte.
+Évalue le sens dans l’ensemble de la réponse du spectateur, pas seulement un champ isolé. Une contradiction interne doit être signalée, pas ignorée. Pour l’idée principale, chaque sous-idée et la conclusion du plan : "ok" si le spectateur en a retenu le sens (même avec d'autres mots), sinon "manque" ou "faux" avec une raison courte. Le tableau sous_idees doit contenir exactement les sous_idees du plan, dans le même ordre. Les nuances fournies servent de contexte factuel : ne les étiquette pas comme des inventions et ne les ajoute pas au tableau sous_idees.
 Réponds en JSON uniquement :
 { "idee_principale": { "verdict": "ok|manque|faux", "raison": "" }, "sous_idees": [ { "verdict": "ok|manque|faux", "raison": "" } ], "conclusion": { "verdict": "ok|manque|faux", "raison": "" } }`;
 
@@ -91,12 +92,13 @@ async function testerComprehension(entree, options = {}) {
   const extraire = options.extraire || extraireImages;
   const appelerTesteur = options.appelerTesteur || appelerTesteurClaude;
   const appelerJuge = options.appelerJuge || ((p, s) => appelerClaude(p, s, 1500));
-  const images = extraire(entree.videoPath, path.join(entree.dossier, 'comprehension-images'));
+  const pas=entree.pasImages||2;
+  const images = extraire(entree.videoPath, path.join(entree.dossier, 'comprehension-images'),pas);
   const srt = entree.srtPath && fs.existsSync(entree.srtPath) ? fs.readFileSync(entree.srtPath, 'utf-8') : '';
   const sousTitres = texteSousTitres(srt) || entree.texteSecours || '';
   // Le testeur ne reçoit ni l'article ni le plan
-  const reponse = lireJson(await appelerTesteur(images, sousTitres));
-  const planSens = { idee_principale: entree.plan.idee_principale, sous_idees: (entree.plan.developpement || []).map((d) => d.affirmation), conclusion: entree.plan.conclusion };
+  const reponse = lireJson(await appelerTesteur(images, sousTitres,pas));
+  const planSens = { idee_principale: entree.plan.idee_principale, sous_idees: (entree.plan.developpement || []).map((d) => d.affirmation), conclusion: entree.plan.conclusion, nuances:(entree.plan.nuances||[]).map(n=>n.texte_voix) };
   const verdicts = lireJson(await appelerJuge(
     `PLAN ÉDITORIAL :\n${JSON.stringify(planSens, null, 2)}\n\nCE QUE LE SPECTATEUR A COMPRIS :\n${JSON.stringify(reponse, null, 2)}\n\n${CONSIGNE_JUGE}`,
     'Tu es un juge strict et factuel. Réponds en JSON valide uniquement.',

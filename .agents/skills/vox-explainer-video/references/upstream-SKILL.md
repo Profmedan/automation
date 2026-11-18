@@ -1,0 +1,162 @@
+---
+name: vox-explainer
+description: Make videos two ways - build collage explainer scenes from a JSON spec (halftone cutouts, flat colour, arrows, a camera travelling a grid), or cut existing footage for YouTube (transcribe, strip filler words and dead air, burn captions, master the audio). Four looks: paper, dark, blueprint, riso. Use for "explainer video", "vox style", "erklaervideo", "rough cut", "cut this footage", "remove filler words", "add subtitles", "edit my video", "motion graphics from a script".
+---
+
+# vox — explainer videos from a spec
+
+Four looks, one spec: `papier` · `dunkel` · `blaupause` · `riso`.
+
+```
+bin/vox.py neu    projekt/          # scaffold: spec + a szene.js to write
+bin/vox.py neu    projekt/ --raster # scaffold with the built-in grid instead
+
+# build a scene from a spec
+bin/vox.py bilder projekt/       # cut out and halftone the photos
+bin/vox.py szene  projekt/       # render the scene
+
+# or cut existing footage
+bin/vox.py schnitt    projekt/   # strip filler words and dead air
+bin/saetze.py …                  # sentence boundaries with times
+bin/umbruch.py                   # Netflix-conformant subtitle line breaking
+bin/vox.py untertitel projekt/   # burn captions
+
+bin/vox.py ton    projekt/       # polish audio, bed, normalise
+bin/vox.py bauen  projekt/       # whichever path the spec implies
+```
+
+`"video": {"quelle": "raw.mp4"}` in the spec switches to footage mode.
+A `szene.js` in the project replaces the built-in grid arrangement.
+
+Everything lives in one `spec.json`. Panels are laid out on a grid in a snake
+path; arrows between them are drawn automatically; `schluss` pulls the camera
+out to show the whole sheet.
+
+## Styles
+
+`"stil"` in the spec switches the whole look: `papier` (warm off-white, creases,
+print misregistration), `dunkel` (near-black, glowing type), `blaupause` (graph
+paper, technical), `riso` (cream, heavy duotone offset). Palette names are
+identical across styles, so switching never means touching the panels.
+
+**A `palette` block in the spec overrides the style.** If a style switch appears
+to do nothing, that is why.
+
+## Compose for the content — do not fill in the grid
+
+`vorlage/raster.js` is **one** arrangement: panels on a grid, a snake path, a
+pull-out. It is convenient, and it makes every video look structurally the same.
+
+**Write a new composition for every video.** `vox.py neu` scaffolds exactly
+that — a `szene.js` skeleton you throw away and replace with an arrangement
+built around what this video actually says. The runtime (`vox.*`) supplies the
+paper, the palette, the camera and the timeline; the shapes and their placement
+are yours. See [docs/laufzeit.md](docs/laufzeit.md).
+
+Reach for `--raster` only when the content really is a chain of separate,
+equal-weight claims. Everything else deserves its own arrangement.
+
+Arrangements worth reaching for instead of the grid:
+
+- a **tall sheet** the camera descends, with one element — a figure, a machine,
+  a map — running continuously through several sections
+- an **anatomical plate**: one subject, labels with arrows pointing into it
+- a **timeline** the camera tracks along
+- a **single object** that grows, splits or fills as the argument builds
+- a **stack** that piles up until it collapses
+
+The prompt decides the arrangement. A cycle wants a loop, a chain of
+consequences wants a descent, a comparison wants two columns that finally
+collide, a single overwhelming thing wants one object that keeps growing.
+
+## How to approach a video
+
+**Measure the reference before copying it.** If the user points at an example,
+pull frames as a contact sheet first — that shows the *mechanic* (how the
+camera moves, what accumulates) — then pull a few full-resolution frames for
+the *craft* (halftone, colour, type, print offset). Sample the palette from the
+image instead of guessing hex values.
+
+**One claim per panel.** A panel that carries two statements needs splitting.
+Six to nine panels carry a 45-second voiceover comfortably.
+
+**Write the script first, then hang the picture off its sentences.** Transcribe
+the voiceover with `bin/transkript.py`, build `saetze.json` with
+`bin/saetze.py`, then anchor each panel with `vox.satz(n)`. A panel that lands
+even half a second late reads as unrelated.
+
+Anchoring on single words (`vox.zeit("Genau")`) inverts the dependency — the
+script ends up written so the scene can find its anchor words — and breaks the
+moment recognition mishears one. Take sentence boundaries from the **written**
+text (`rede.json`), never from recognition: it swallows punctuation and merges
+sentences, and every index after that point is off by one.
+
+**Show the thing, do not label it.** If the voiceover names something, the
+picture has to do it. A card with the word written on it is an caption, not an
+illustration.
+
+**Only real numbers.** Counters and bars assert magnitude. If a figure cannot be
+verified, use a label instead of inventing one — or attribute it in the kicker
+("A study rates …").
+
+## Cutting footage
+
+**Two sources, never one.** The transcript says where speech is; the level
+measurement says where silence is. Many models emit zero-length gaps between
+words, so pauses are not derivable from a transcript — and a level measurement
+mistakes quiet speech for silence. **A cut that touches a word is discarded.**
+
+**Compute the silence threshold from the recording.** A fixed value is a bet on
+the level. On one phone recording the loudest speech peaked at −36 dB; a fixed
+−33 dB classified the whole clip as silence and destroyed it.
+
+**"also" and "genau" are not filler.** At the start of a sentence they carry it;
+removing them wrecks the syntax.
+
+**Remap caption times through the cut.** Otherwise they run ahead by exactly
+the removed duration.
+
+## Pitfalls
+
+- **A `<svg>` without `width`/`height` is 300×150.** CSS `inset:0` does not
+  stretch it. A grain overlay then sits as a small box in one corner and the
+  paper just looks "a bit too clean".
+- **Halftone contrast above ~1.2 destroys faces.** They collapse into black and
+  white blobs. Keep midtones and lighten dark kit instead.
+- **Crop cutouts to their silhouette** (`--eng`). Otherwise every photo carries
+  a different amount of empty margin and the heights in the layout no longer
+  relate to each other.
+- **HyperFrames reads `data-duration` from the static HTML** before any script
+  runs. Setting it at runtime is too late — `vox.py` writes it in.
+- **Do not guess `transformOrigin`.** The world is `0 0`, bars are
+  `left center`. A blanket `center center` pushes the world out of frame when it
+  zooms out.
+- **A camera move needs a start *and* an end.** Giving only the target makes
+  every move jump.
+- **Compute camera targets:** `x = B/2 - s*cx`, `y = H/2 - s*cy`. Eyeballed
+  values put labelling arrows on the wrong body part.
+- **Measure an element before placing something beside it** (`offsetWidth`).
+  A guessed offset lands the arrow inside the text box, where it reads as a
+  strikethrough.
+- **An ASS `Format:` line must list `SecondaryColour`.** Leave it out and
+  libass misassigns every following field — the text simply never appears, with
+  no error anywhere.
+- **`-ss` before `-i` resets timestamps to zero**, so a subtitle test frame
+  pulled that way shows nothing even when the burn is fine.
+- **A scene that throws still produces a video.** The renderer keeps going and
+  delivers full length with half a scene, no error anywhere. A guard paints the
+  error into the frame — pull one frame to read it.
+- **Subtitle line breaks need grammar, not just a width.** An article,
+  preposition or number must not end a line; `5,2 / ct` splits a figure from its
+  unit. `bin/umbruch.py` scores every seam.
+- **Derive the subtitle character limit from frame width and font size.** Set it
+  too high and libass wraps a second time, undoing a correct break. Too low and
+  the rule becomes unsatisfiable in German — then shrink the font, not the rule.
+- **Dark styles need inverted photos.** Black halftone dots on a black ground
+  are invisible; `vox.py` sets this from the style, `fotos_negativ` overrides.
+
+## Checking the result
+
+Never call it done from a green exit code. Build a contact sheet
+(`ffmpeg -vf "fps=0.5,scale=300:-1,tile=6x4"`) and look at it, then check the
+final pull-out frame separately — that is where layout mistakes show up.

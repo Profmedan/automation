@@ -1,0 +1,15 @@
+[
+  {
+    "repo": "bangtutorial/bang-motion",
+    "url": "https://github.com/bangtutorial/bang-motion",
+    "commit": "c1aa65e921c970d858705fcb4a53a8294d1a4131",
+    "path": "SKILL.md",
+    "license": "MIT",
+    "adaptation": "Règles textuelles et références ; moteur Hyperframes/GSAP local, aucun exécutable upstream.",
+    "statut": "actif",
+    "fichiers_references": [
+      "references/anti-ppt.md",
+      "references/explainer.md"
+    ]
+  }
+]

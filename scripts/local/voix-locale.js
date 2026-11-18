@@ -2,7 +2,7 @@
  * Voix off en local (12 nov. 2026) : la voix clonée de Pierre (Chatterbox Multilingual, Docker sans réseau),
  * une prise par scène, réécoutée par Whisper local ; Kokoro (voix-off-fr) en secours si Chatterbox échoue.
  *
- * Sorties dans <dossier>/voix/ : s<N>.wav (une par scène, tempo ×1,05), voix.wav (scènes bout à bout),
+ * Sorties dans <dossier>/voix/ : s<N>.wav (une par scène, tempo ×1,10), voix.wav (scènes bout à bout),
  * calage.json (début et fin de chaque scène, mots horodatés, ressemblance avec le script).
  */
 const fs = require('fs');
@@ -32,6 +32,9 @@ function appliquerPrononciation(texte, dico = PRONONCIATION) {
 /** Texte réellement dit : dictionnaire de prononciation, adresse du blog épelée, « IA » prononcé « i-a ». */
 function texteDit(texte, adresseBlog, dico = PRONONCIATION) {
   let t = appliquerPrononciation(texte, dico);
+  // Règle explicite de Pierre : toutes les casses et les versions (« ChatGPT-5 ») se lisent en français.
+  t = t.replace(/(?<![\p{L}\d])chatgpt(?![\p{L}\d])/giu, PRONONCIATION.ChatGPT);
+  t = t.replace(/(?<![\p{L}\d])openai(?![\p{L}\d])/giu, PRONONCIATION.OpenAI);
   if (adresseBlog) {
     const ditAdresse = adresseBlog.replace(/\./g, ' point ');
     t = t.split(adresseBlog).join(ditAdresse);
@@ -52,6 +55,7 @@ function chatterbox(items, dossier, graine) {
   fs.copyFileSync(CONFIG.CHATTERBOX.reference, path.join(dossier, 'reference.wav'));
   const t0 = Date.now();
   execFileSync('docker', ['run', '--rm', '--network', 'none', '-e', 'HF_HUB_OFFLINE=1',
+    '-e', 'OMP_NUM_THREADS=4', '-e', 'MKL_NUM_THREADS=4', // Mac à quatre cœurs : limiter les pools CPU de PyTorch.
     '-v', `${CONFIG.CHATTERBOX.modeles}:/modeles:ro`, '-v', `${dossier}:/travail`, '-w', '/travail',
     CONFIG.CHATTERBOX.image, 'python', '/app/generer.py', `${nom}.json`, '--ref', 'reference.wav', '--out', `${nom}/`, '--seed', String(graine)],
   { stdio: 'pipe', maxBuffer: 64 * 1024 * 1024, timeout: 60 * 60 * 1000 });
@@ -87,7 +91,8 @@ async function genererVoixLocale(scenes, dossierVideo, options = {}) {
   }
   journal.push(`${prises.moteur} : ${prises.secondes.toFixed(0)} s de calcul`);
 
-  // Tempo ×1,05 (comme les vidéos précédentes) et réécoute de chaque scène par Whisper local
+  // +10 % par rapport à la prise brute, hauteur préservée ; Whisper mesure les temps après accélération.
+  journal.push(`Tempo voix : ×${CONFIG.CHATTERBOX.tempo.toFixed(2)} par rapport aux prises brutes`);
   const parScene = {};
   const ecouter = (source, id) => {
     const wav = path.join(dossier, `${id}.wav`);
@@ -146,7 +151,7 @@ async function genererVoixLocale(scenes, dossierVideo, options = {}) {
   fs.writeFileSync(fichierListe, liste.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join('\n'));
   const voix = path.join(dossier, 'voix.wav');
   execFileSync(CONFIG.FFMPEG, ['-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', fichierListe, '-c', 'copy', voix]);
-  const resultat = { voix, duree: +t.toFixed(3), scenes: calage, moteur: prises.moteur, journal };
+  const resultat = { voix, duree: +t.toFixed(3), scenes: calage, moteur: prises.moteur, tempo: CONFIG.CHATTERBOX.tempo, journal };
   fs.writeFileSync(path.join(dossier, 'calage.json'), JSON.stringify(resultat, null, 1));
   return resultat;
 }

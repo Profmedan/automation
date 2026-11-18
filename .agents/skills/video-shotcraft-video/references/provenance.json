@@ -1,0 +1,17 @@
+[
+  {
+    "repo": "Vincentwei1021/video-shotcraft",
+    "url": "https://github.com/Vincentwei1021/video-shotcraft",
+    "commit": "6700db2ba80572ebc777b99d72049679fed9840c",
+    "path": "SKILL.md",
+    "license": "Apache-2.0",
+    "adaptation": "Règles textuelles et références ; moteur Hyperframes/GSAP local, aucun exécutable upstream.",
+    "statut": "actif",
+    "fichiers_references": [
+      "references/aesthetic-rules.md",
+      "references/final-review.md",
+      "references/shots/camera/depth-layer-moves.md",
+      "demos/camera/depth-layer-moves/MultiplaneReal.tsx"
+    ]
+  }
+]

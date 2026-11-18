@@ -16,7 +16,8 @@ const { generateVideoScript } = require('./scripts/generate-script-dynamic'); //
 const { genererPlanEditorial, rapportVideo } = require('./scripts/editorial-plan');
 const { testerComprehension } = require('./scripts/comprehension-test');
 const { genererVoixLocale } = require('./scripts/local/voix-locale'); // voix clonée, Chatterbox hors réseau
-const { rendreVideoLocale } = require('./scripts/local/rendu-hyperframes'); // scènes en code, avatar, mixage
+const { rendreVideoLocale, fenetresScenes } = require('./scripts/local/rendu-hyperframes'); // scènes en code, avatar, mixage
+const { genererStoryboardMotion } = require('./scripts/local/storyboard-motion');
 const { usageClaude } = require('./scripts/editorial-plan');
 const FormData = require('form-data');
 const axios = require('axios');
@@ -97,7 +98,8 @@ async function generateLinkedInVideo(article) {
     const produire = async (consignes = []) => {
       // ÉTAPE 1: Script écrit scène par scène depuis le plan
       console.log('\n📄 Génération du script vidéo...');
-      const videoScript = await chrono('script', () => generateVideoScript(article, plan, { consignes }));
+      const videoScript = await chrono('script', () => generateVideoScript(article, plan, { consignes, banqueMotion: path.join(CONFIG.outputPath, '.motion-library'), dossierDiagnostic: videoFolder }));
+      require('./scripts/local/directions-visuelles').preparerDirection(videoScript,videoFolder);
       await fs.writeFile(path.join(videoFolder, 'script.json'), JSON.stringify(videoScript, null, 2));
 
       // ÉTAPE 2: Voix clonée en local (Chatterbox, Docker sans réseau), réécoutée par Whisper local
@@ -109,6 +111,10 @@ async function generateLinkedInVideo(article) {
       ));
       calage.journal.forEach((l) => console.log(`   ${l}`));
       console.log(`✅ Voix : ${calage.duree.toFixed(1)} s (${calage.moteur})`);
+
+      // Les dessins sont écrits sur les durées mesurées, avec une nouvelle image animée au plus toutes les 2 s.
+      videoScript.storyboardMotion = await chrono('storyboard',()=>genererStoryboardMotion(videoScript,fenetresScenes(calage),videoFolder));
+      await fs.writeFile(path.join(videoFolder,'script.json'),JSON.stringify(videoScript,null,2));
 
       // ÉTAPE 3: Scènes Hyperframes en code, avatar (Rhubarb), musique Mixkit et bruitages CC0
       console.log('\n🎬 Rendu Hyperframes local...');
@@ -123,7 +129,7 @@ async function generateLinkedInVideo(article) {
     // ÉTAPE 3.5 (obligatoire) : test de compréhension sur le MP4 final, par un testeur qui n'a pas lu l'article
     console.log('\\n🧪 Test de compréhension...');
     const tester = () => chrono('test', () => testerComprehension({
-      videoPath, srtPath: rendu.srtPath, texteSecours: videoScript.narration, plan, dossier: videoFolder,
+      videoPath, srtPath: rendu.srtPath, texteSecours: videoScript.narration, plan, dossier: videoFolder, pasImages:videoScript.storyboardMotion?1:2,
     }));
     let comprehension = await tester();
     if (!comprehension.ok) {
@@ -137,8 +143,8 @@ async function generateLinkedInVideo(article) {
     // Rapport de la vidéo : plan éditorial + résultat du test, joints à chaque vidéo
     const production = {
       duree_video_s: rendu.duree, productions: produireCompte.n, temps_s: temps, rendu_hyperframes_s: rendu.secondesRendu,
-      voix: calage.moteur, voix_journal: calage.journal, ressemblance_whisper: calage.scenes.map((x) => `${x.id} ${x.ressemblance}`),
-      son: rendu.mesures, musique: rendu.musique, claude: usageClaude(),
+      voix: calage.moteur, tempo_voix:calage.tempo, voix_journal: calage.journal, ressemblance_whisper: calage.scenes.map((x) => `${x.id} ${x.ressemblance}`),
+      son: rendu.mesures, musique: rendu.musique, motion: rendu.motion, earshot:rendu.earshot, claude: usageClaude(),
     };
     await fs.writeFile(path.join(videoFolder, 'production.json'), JSON.stringify(production, null, 2));
     await fs.writeFile(path.join(videoFolder, 'RAPPORT.md'), rapportVideo(plan, comprehension, production));

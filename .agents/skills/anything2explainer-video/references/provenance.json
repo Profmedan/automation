@@ -1,0 +1,17 @@
+[
+  {
+    "repo": "Vincentwei1021/anything2explainer",
+    "url": "https://github.com/Vincentwei1021/anything2explainer",
+    "commit": "0b85f6c7bfc4ef094ee1afb6c68c06fcf329cfab",
+    "path": "SKILL.md",
+    "license": "PolyForm-Noncommercial-1.0.0",
+    "adaptation": "Règles textuelles et références ; moteur Hyperframes/GSAP local, aucun exécutable upstream.",
+    "statut": "actif",
+    "fichiers_references": [
+      "reference/composition-and-light.md",
+      "reference/narration-storyboard.md",
+      "reference/agent-qc-rules.md"
+    ],
+    "cadre_utilisation": "Usage personnel non commercial confirmé explicitement par Pierre le 14 novembre 2026."
+  }
+]

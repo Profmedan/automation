@@ -1,0 +1,7 @@
+{
+  "repo": "Leonxlnx/earshot",
+  "commit": "4ac3d2ac2b151e1c23376f9ce7f3047a17050013",
+  "version": "0.4.1",
+  "license": "MIT",
+  "mode": "local, CPU, hors réseau ; llm/Gemini désactivé"
+}

@@ -1,0 +1,15 @@
+[
+  {
+    "repo": "haidrrrry/claude-remotion-skill",
+    "url": "https://github.com/haidrrrry/claude-remotion-skill",
+    "commit": "1dcbe5e3fc6cf970bd10d3cc05f0a8a5d19d0383",
+    "path": "remotion-motion-graphics/SKILL.md",
+    "license": "MIT",
+    "adaptation": "Règles textuelles et références ; moteur Hyperframes/GSAP local, aucun exécutable upstream.",
+    "statut": "actif",
+    "fichiers_references": [
+      "remotion-motion-graphics/references/design-rules.md",
+      "remotion-motion-graphics/references/motion-patterns.md"
+    ]
+  }
+]

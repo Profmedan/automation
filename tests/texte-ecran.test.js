@@ -32,7 +32,7 @@ function scriptAvecChiffres(plan) {
         : ref === 'developpement.1' ? 'Flou : 51 sur 60' : 'Texte concret de scène',
       source: '',
       duration: 4,
-      visuel: { type: 'titre' },
+      visuel: { type: 'composition', intention: 'Montrer les éléments du plan', elements: [{ id: 'e0', type: 'carte', texte: 'Image nette', x: 5, y: 20, w: 38, h: 40, mouvement: 'volet' }, { id: 'e1', type: 'carte', texte: 'Décision du robot', x: 57, y: 20, w: 38, h: 40, mouvement: 'zoom' }], liens: [{ de: 'e0', vers: 'e1' }] },
     })),
   };
 }

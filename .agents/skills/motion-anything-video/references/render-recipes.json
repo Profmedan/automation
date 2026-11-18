@@ -1,0 +1,122 @@
+[
+  {
+    "id": "word-stack",
+    "type": "titre",
+    "famille": "typographie",
+    "source": "kinetic-headline",
+    "nom": "Mots en cascade",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Contenu du type indiqué et durée permettant la lecture"
+  },
+  {
+    "id": "underline-reveal",
+    "type": "titre",
+    "famille": "trace",
+    "source": "kinetic-headline",
+    "nom": "Titre et trait dessiné",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Contenu du type indiqué et durée permettant la lecture"
+  },
+  {
+    "id": "radial-gauge",
+    "type": "compteur",
+    "famille": "radial",
+    "source": "count-up",
+    "nom": "Jauge circulaire",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Proportion positive avec une base, valeur comprise entre 0 et la base"
+  },
+  {
+    "id": "stat-panel",
+    "type": "compteur",
+    "famille": "panneau",
+    "source": "count-up",
+    "nom": "Carte de donnée à valeur fixe",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Contenu du type indiqué et durée permettant la lecture"
+  },
+  {
+    "id": "column-rise",
+    "type": "barres",
+    "famille": "colonnes",
+    "source": "stagger-list",
+    "nom": "Colonnes verticales",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Données non négatives"
+  },
+  {
+    "id": "lollipop-chart",
+    "type": "barres",
+    "famille": "points",
+    "source": "stagger-list",
+    "nom": "Graphique à tiges et points",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Contenu du type indiqué et durée permettant la lecture"
+  },
+  {
+    "id": "split-panels",
+    "type": "comparaison",
+    "famille": "volets",
+    "source": "fade-in-up",
+    "nom": "Comparaison en volets",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Contenu du type indiqué et durée permettant la lecture"
+  },
+  {
+    "id": "stacked-cards",
+    "type": "comparaison",
+    "famille": "cartes",
+    "source": "stagger-list",
+    "nom": "Comparaison en cartes verticales",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Contenu du type indiqué et durée permettant la lecture"
+  },
+  {
+    "id": "connected-timeline",
+    "type": "etapes",
+    "famille": "frise",
+    "source": "stagger-list",
+    "nom": "Frise reliée",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Contenu du type indiqué et durée permettant la lecture"
+  },
+  {
+    "id": "staircase",
+    "type": "etapes",
+    "famille": "escalier",
+    "source": "stagger-list",
+    "nom": "Étapes en escalier",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Contenu du type indiqué et durée permettant la lecture"
+  },
+  {
+    "id": "quote-panel",
+    "type": "citation",
+    "famille": "citation",
+    "source": "fade-in-up",
+    "nom": "Citation sur papier",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Contenu du type indiqué et durée permettant la lecture"
+  },
+  {
+    "id": "quote-spotlight",
+    "type": "citation",
+    "famille": "focus",
+    "source": "kinetic-headline",
+    "nom": "Citation et filet lumineux",
+    "implementation": "scripts/local/motion-recipes.js",
+    "origine": "Composition locale originale inspirée des principes des skills",
+    "contraintes": "Contenu du type indiqué et durée permettant la lecture"
+  }
+]

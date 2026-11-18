@@ -22,3 +22,6 @@ Thumbs.db
 concat.txt
 .env.bak*
 .env.save
+
+# Modèles et cache audio locaux
+.cache/

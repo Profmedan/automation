@@ -1,0 +1,108 @@
+[
+  {
+    "skill": "vox-explainer-video",
+    "repo": "bestuserever121/vox-explainer",
+    "url": "https://github.com/bestuserever121/vox-explainer",
+    "commit": "e00257776b8291dad1846a5848337443a49ee37f",
+    "path": "SKILL.md",
+    "license": "MIT",
+    "adaptation": "Règles textuelles et références ; moteur Hyperframes/GSAP local, aucun exécutable upstream.",
+    "statut": "actif",
+    "fichiers_references": [
+      "docs/laufzeit.md"
+    ]
+  },
+  {
+    "skill": "hand-drawn-explainer-video",
+    "repo": "hi-nikola/hand-drawn-explainer-video-nikola",
+    "url": "https://github.com/hi-nikola/hand-drawn-explainer-video-nikola",
+    "commit": "3ee5d1c01fe8d34f5162c4aace418753f85bd0d9",
+    "path": "SKILL.md",
+    "license": "Apache-2.0",
+    "adaptation": "Règles textuelles et références ; moteur Hyperframes/GSAP local, aucun exécutable upstream.",
+    "statut": "actif",
+    "fichiers_references": [
+      "references/automation-workflow.md",
+      "references/quality-and-delivery.md"
+    ]
+  },
+  {
+    "skill": "anything2explainer-video",
+    "repo": "Vincentwei1021/anything2explainer",
+    "url": "https://github.com/Vincentwei1021/anything2explainer",
+    "commit": "0b85f6c7bfc4ef094ee1afb6c68c06fcf329cfab",
+    "path": "SKILL.md",
+    "license": "PolyForm-Noncommercial-1.0.0",
+    "adaptation": "Règles textuelles et références ; moteur Hyperframes/GSAP local, aucun exécutable upstream.",
+    "statut": "actif",
+    "fichiers_references": [
+      "reference/composition-and-light.md",
+      "reference/narration-storyboard.md",
+      "reference/agent-qc-rules.md"
+    ],
+    "cadre_utilisation": "Usage personnel non commercial confirmé explicitement par Pierre le 14 novembre 2026."
+  },
+  {
+    "skill": "bang-motion-video",
+    "repo": "bangtutorial/bang-motion",
+    "url": "https://github.com/bangtutorial/bang-motion",
+    "commit": "c1aa65e921c970d858705fcb4a53a8294d1a4131",
+    "path": "SKILL.md",
+    "license": "MIT",
+    "adaptation": "Règles textuelles et références ; moteur Hyperframes/GSAP local, aucun exécutable upstream.",
+    "statut": "actif",
+    "fichiers_references": [
+      "references/anti-ppt.md",
+      "references/explainer.md"
+    ]
+  },
+  {
+    "skill": "claude-remotion-video",
+    "repo": "haidrrrry/claude-remotion-skill",
+    "url": "https://github.com/haidrrrry/claude-remotion-skill",
+    "commit": "1dcbe5e3fc6cf970bd10d3cc05f0a8a5d19d0383",
+    "path": "remotion-motion-graphics/SKILL.md",
+    "license": "MIT",
+    "adaptation": "Règles textuelles et références ; moteur Hyperframes/GSAP local, aucun exécutable upstream.",
+    "statut": "actif",
+    "fichiers_references": [
+      "remotion-motion-graphics/references/design-rules.md",
+      "remotion-motion-graphics/references/motion-patterns.md"
+    ]
+  },
+  {
+    "skill": "video-shotcraft-video",
+    "repo": "Vincentwei1021/video-shotcraft",
+    "url": "https://github.com/Vincentwei1021/video-shotcraft",
+    "commit": "6700db2ba80572ebc777b99d72049679fed9840c",
+    "path": "SKILL.md",
+    "license": "Apache-2.0",
+    "adaptation": "Règles textuelles et références ; moteur Hyperframes/GSAP local, aucun exécutable upstream.",
+    "statut": "actif",
+    "fichiers_references": [
+      "references/aesthetic-rules.md",
+      "references/final-review.md",
+      "references/shots/camera/depth-layer-moves.md",
+      "demos/camera/depth-layer-moves/MultiplaneReal.tsx"
+    ]
+  },
+  {
+    "skill": "lemo-opuscar-video",
+    "repo": "lemomo-ai/lemo-opuscar",
+    "url": "https://github.com/lemomo-ai/lemo-opuscar",
+    "commit": "3a7132b996be0241c1ea0ab180d519f06e6f10b6",
+    "path": "plugin/skills/lemo-opuscar/SKILL.md",
+    "license": "CC-BY-NC-4.0 (documents) ; permission additionnelle dans LICENSE ; MIT (code non importé)",
+    "adaptation": "Principes textuels adaptés à SVG/GSAP/Hyperframes ; aucun exécutable upstream, aucune promesse des 99 styles.",
+    "statut": "actif",
+    "fichiers_references": [
+      "DIRECTOR.md",
+      "TECHNIQUE.md",
+      "styles/README.md",
+      "styles/sketchnote/STYLE.md",
+      "styles/pictogram-motion/STYLE.md",
+      "styles/instruction-manual/STYLE.md"
+    ],
+    "cadre_utilisation": "Usage personnel non commercial confirmé par Pierre le 14 novembre 2026."
+  }
+]

@@ -8,6 +8,8 @@ const VIDEOS = process.env.VIDEOS_DIR || path.join(os.homedir(), 'Desktop', 'VID
 const OUTILS = path.join(VIDEOS, 'outils');
 
 module.exports = {
+  EARSHOT: { image:'earshot-local:0.4.1-4ac3d2a', cache:path.resolve(__dirname,'../../.cache/earshot') },
+  MOTION: { intervalle_s: 2 }, // Nouveau dessin animé au plus toutes les deux secondes, calé après la voix.
   VIDEOS,
   FFMPEG: process.env.FFMPEG_PATH || '/usr/local/Caskroom/mambaforge/base/bin/ffmpeg',
   FFPROBE: process.env.FFPROBE_PATH || '/usr/local/Caskroom/mambaforge/base/bin/ffprobe',
@@ -16,7 +18,7 @@ module.exports = {
     image: 'chatterbox-fr:0.1.7',
     modeles: path.join(OUTILS, 'chatterbox', 'modeles'),
     reference: process.env.VOIX_REFERENCE || path.join(OUTILS, 'chatterbox', 'ma-voix', 'reference-extrait.wav'),
-    tempo: 1.05,
+    tempo: 1.10, // Pierre : +10 % sur la prise brute ; appliqué avant le calage Whisper.
   },
   // Secours : Kokoro (skill voix-off-fr), voix ff_siwis
   KOKORO: {

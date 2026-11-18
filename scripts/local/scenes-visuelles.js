@@ -7,7 +7,12 @@
  *   source x 40–520, y 1310–1600 · avatar x 540–920, y 1303–1610 (en bas à droite, au-dessus des boutons du réseau)
  */
 
-const TYPES_VISUELS = ['titre', 'compteur', 'barres', 'comparaison', 'etapes', 'citation'];
+const {svgIllustration}=require('./illustrations');
+const { profilMotion, easeMotion } = require('./motion-skills');
+const { dessinerMotion } = require('./motion-recipes');
+const { validerComposition, faitsComposition, dessinerComposition, styleScene } = require('./motion-composition');
+
+const TYPES_VISUELS = ['titre', 'compteur', 'barres', 'comparaison', 'etapes', 'citation', 'composition'];
 
 function echapper(t) {
   return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -35,7 +40,7 @@ function nombresDuVisuel(v) {
     else if (Array.isArray(x)) x.forEach(voir);
     else if (typeof x === 'object') Object.values(x).forEach(voir);
   };
-  voir(v);
+  voir(v?.type === 'composition' ? faitsComposition(v) : v);
   return out;
 }
 
@@ -55,10 +60,21 @@ function validerVisuel(v, ou, textePlan) {
   const LETTRES = ['un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze'];
   const bas = plan.toLowerCase();
   LETTRES.forEach((m, i) => { if (new RegExp(`(^|[^a-zà-ÿ])${m}e?s?([^a-zà-ÿ]|$)`).test(bas)) presents.push(i + 1); });
+  // Fractions en lettres traduites en pourcentage (17 nov. 2026 : « un tiers » du plan affiché « 33 % »)
+  const FRACTIONS = [[/\bun\s+tiers\b/, [33, 33.3]], [/\bdeux\s+tiers\b/, [66, 66.7, 67]], [/\bun\s+quart\b/, [25]],
+    [/\btrois\s+quarts\b/, [75]], [/\bmoiti[ée](?![a-zà-ÿ])/, [50]]];
+  for (const [motif, valeurs] of FRACTIONS) if (motif.test(bas)) presents.push(...valeurs);
+  // « quatre employeurs sur dix » → 40 %
+  LETTRES.slice(0, 10).forEach((m, i) => {
+    for (const ecrit of [m, String(i + 1)]) {
+      if (new RegExp(`(?<![a-zà-ÿ\\d])${ecrit}\\s+(?:[a-zà-ÿ'’-]+\\s+){0,2}sur\\s+(?:dix|10)(?![a-zà-ÿ\\d])`).test(bas)) presents.push((i + 1) * 10);
+    }
+  });
   // 100 (base d'un pourcentage) et 0 ne sont pas des faits : toujours permis
-  for (const n of nombresDuVisuel(v).filter((x) => x !== 100 && x !== 0)) {
+  for (const n of nombresDuVisuel(v).filter((x) => v.type === 'composition' || (x !== 100 && x !== 0))) {
     if (!presents.some((p) => Math.abs(p - n) < 0.051 || Math.abs(Math.round(p) - n) < 0.001)) e.push(`${ou} : le nombre ${n} du visuel n'est pas dans le plan`);
   }
+  if (v.type === 'composition') e.push(...validerComposition(v).map(x => `${ou} : ${x}`));
   if (v.type === 'compteur') {
     if (nombreDe(v.valeur) == null) e.push(`${ou} : compteur sans valeur`);
     if (v.sur != null && nombreDe(v.sur) == null) e.push(`${ou} : compteur « sur » invalide`);
@@ -175,6 +191,7 @@ function cssVisuel(id, v) {
 }
 
 function jsVisuel(id, v, scene, motsScene, debutScene, D) {
+  const motion = profilMotion(v.type);
   const l = [];
   switch (v.type) {
     case 'compteur': {
@@ -184,7 +201,7 @@ function jsVisuel(id, v, scene, motsScene, debutScene, D) {
       l.push(`const cpt = { v: 0 }; const val = document.getElementById("${id}-val");`,
         `tl.to(cpt, { v: ${n}, duration: 1.1, ease: "power2.out", onUpdate: () => { val.textContent = cpt.v.toFixed(${decimales}).replace(".", ","); } }, ${t.toFixed(2)});`,
         `tl.set(val, { textContent: "${nombreFr(n)}" }, ${(t + 1.15).toFixed(2)});`,
-        `tl.fromTo("#${id}-cpt", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, transformOrigin: "0% 100%", duration: 0.3, ease: "back.out(1.8)" }, ${Math.max(0.1, t - 0.2).toFixed(2)});`,
+        `tl.fromTo("#${id}-cpt", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, transformOrigin: "0% 100%", duration: 0.3, ease: easeMotion }, ${Math.max(0.1, t - 0.2).toFixed(2)});`,
         `if (document.getElementById("${id}-plein")) tl.fromTo("#${id}-plein", { scaleX: 0 }, { scaleX: 1, duration: 1.1, ease: "power2.out" }, ${t.toFixed(2)});`,
         `tl.fromTo("#${id}-lib", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.3 }, ${(t + 0.4).toFixed(2)});`);
       break;
@@ -193,16 +210,16 @@ function jsVisuel(id, v, scene, motsScene, debutScene, D) {
       v.donnees.forEach((d, i) => {
         const t = Math.min(D - 1.2, tempsDuNombre(motsScene, d.valeur, debutScene, 0.5 + i * 0.7));
         l.push(`tl.fromTo("#${id}-l${i}", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.25 }, ${Math.max(0.1, t - 0.3).toFixed(2)});`,
-          `tl.fromTo("#${id}-b${i}", { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: "power3.out" }, ${t.toFixed(2)});`);
+          `tl.fromTo("#${id}-b${i}", { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: easeMotion }, ${t.toFixed(2)});`);
       });
       break;
     case 'comparaison':
-      l.push(`tl.fromTo("#${id}-gauche", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, 0.3);`,
+      l.push(`tl.fromTo("#${id}-gauche", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.3, ease: easeMotion }, 0.3);`,
         `tl.fromTo("#${id}-fleche", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.25 }, ${(D * 0.4).toFixed(2)});`,
-        `tl.fromTo("#${id}-droite", { opacity: 0, y: 40, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: "back.out(1.6)" }, ${(D * 0.42).toFixed(2)});`);
+        `tl.fromTo("#${id}-droite", { opacity: 0, y: 40, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: easeMotion }, ${(D * 0.42).toFixed(2)});`);
       break;
     case 'etapes':
-      v.etapes.forEach((_, i) => l.push(`tl.fromTo("#${id}-e${i}", { opacity: 0, x: -60 }, { opacity: 1, x: 0, duration: 0.28, ease: "back.out(1.6)" }, ${(0.4 + i * Math.max(0.6, (D * 0.7) / v.etapes.length)).toFixed(2)});`));
+      v.etapes.forEach((_, i) => l.push(`tl.fromTo("#${id}-e${i}", { opacity: 0, x: -${motion.distance_px} }, { opacity: 1, x: 0, duration: ${motion.entree_s}, ease: easeMotion }, ${(0.4 + i * Math.max(0.6, (D * 0.7) / v.etapes.length)).toFixed(2)});`));
       break;
     case 'citation':
       l.push(`tl.fromTo(["#${id}-guill", "#${id}-cit"], { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.35, stagger: 0.1 }, 0.3);`,
@@ -220,6 +237,7 @@ function jsVisuel(id, v, scene, motsScene, debutScene, D) {
  */
 function htmlScene(scene, c) {
   const { id, duree: D } = c;
+  const motion = profilMotion("titre");
   const v = scene.planRef === 'appel' ? { type: 'appel' } : scene.planRef === 'sources' ? { type: 'sources' } : (scene.visuel || { type: 'titre' });
   const titreSeul = v.type === 'titre';
   const lab = etiquette(scene, c.nbSousIdees);
@@ -232,9 +250,10 @@ function htmlScene(scene, c) {
       #${id}-lire { font: 700 38px Roboto, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muet); }
       #${id}-url { margin-top: 26px; font: 900 64px Roboto, sans-serif; color: var(--accent); white-space: nowrap; }
       #${id}-trait { margin-top: 22px; height: 8px; width: 420px; border-radius: 4px; background: var(--accent); transform-origin: 0 50%; }`;
-    js = `tl.fromTo("#${id}-carte", { opacity: 0, y: 60, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: "back.out(1.5)" }, 0.2);
+    js = `tl.fromTo("#${id}-carte", { opacity: 0, y: 60, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: easeMotion }, 0.2);
       tl.fromTo("#${id}-trait", { scaleX: 0 }, { scaleX: 1, duration: 0.4, ease: "power2.out" }, 0.6);
       tl.fromTo("#${id}-url", { scale: 1 }, { scale: 1.05, transformOrigin: "0% 50%", duration: 0.15, yoyo: true, repeat: 1, immediateRender: false }, ${Math.min(D - 0.6, 1.4).toFixed(2)});`;
+    if(scene.variante%2)css+=`#${id}-carte {top:740px;padding:40px 35px;background:transparent;box-shadow:none;border:4px solid var(--accent-vif);color:var(--encre);} #${id}-lire {color:var(--encre-2);} #${id}-url {color:var(--accent-vif);}`;
   } else if (v.type === 'sources') {
     corps = `<div id="${id}-liste"><div id="${id}-t">SOURCES</div>${(scene.sourcesEcran || []).slice(0, 3).map((s, i) => `<div class="${id}-src" id="${id}-s${i}"><div class="${id}-st">« ${echapper(s.titre)} »</div><div class="${id}-sa">${echapper(s.auteur)}</div></div>`).join('')}</div>`;
     css = `#${id}-liste { position: absolute; left: 40px; top: 640px; width: 900px; }
@@ -244,44 +263,75 @@ function htmlScene(scene, c) {
       .${id}-sa { margin-top: 8px; font: 400 32px Roboto, sans-serif; color: var(--encre-2); line-height: 1.2; }`;
     js = `tl.fromTo("#${id}-t", { opacity: 0 }, { opacity: 1, duration: 0.25 }, 0.1);
       tl.fromTo(".${id}-src", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.25 }, 0.25);`;
+    if(scene.sourcesContinues&&scene.sourcesEcran?.length){
+      const sources=scene.sourcesEcran,actif=(scene.variante||0)%sources.length;
+      corps=`<div id="${id}-liste"><div id="${id}-focus">${echapper(sources[actif].auteur)}</div><div id="${id}-grille">${sources.map((s,i)=>`<div class="${id}-src" id="${id}-s${i}"><div class="${id}-st">${echapper(s.titre)}</div><div class="${id}-sa">${echapper(s.auteur)}</div></div>`).join('')}</div></div>`;
+      css=`#${id}-liste{position:absolute;left:40px;top:640px;width:900px;} #${id}-focus{font:700 52px var(--font-display),Georgia,serif;color:var(--accent-vif);height:72px;}
+      #${id}-grille{display:grid;grid-template-columns:1fr 1fr;gap:18px;} .${id}-src{height:245px;padding:18px;border:2px solid var(--filet);border-radius:3px;}
+      .${id}-st{font:700 34px/1.12 var(--font-body),sans-serif;} .${id}-sa{font:500 34px/1.1 var(--font-body),sans-serif;color:var(--encre-2);margin-top:12px;}
+      #${id}-s${actif}{border:4px solid var(--accent-vif);background:var(--fond-b);} `;
+      js=`tl.fromTo("#${id}-focus",{opacity:0,y:12},{opacity:1,y:0,duration:0.25,ease:easeMotion},0);`;
+    }
   } else {
     corps = htmlVisuel(id, v);
     css = cssVisuel(id, v);
     js = jsVisuel(id, v, scene, c.mots, c.debut, D);
   }
-  const source = String(scene.source || '').trim();
+  const dessin = !['appel','sources'].includes(v.type) && scene.visuel?.type === 'composition'
+    ? dessinerComposition(scene, c, { echapper, nombreFr })
+    : dessinerMotion(scene, c, { echapper, nombreFr, tempsDuNombre });
+  if(['appel','sources'].includes(v.type)){
+    const icones=v.type==='appel'?['document','loupe']:['document','loupe','personne','reseau'];
+    const icone=icones[(scene.variante||0)%icones.length];
+    corps+=`<div id="${id}-cloture">${svgIllustration({icone,accent:true},`${id}-cloture`,echapper)}</div>`;
+    css+=`#${id}-cloture{position:absolute;left:40px;top:1320px;width:460px;height:260px;} #${id}-cloture svg{display:block;width:100%;height:100%;}`;
+    js+=`tl.fromTo("#${id}-cloture",{opacity:0,y:18,scale:.88},{opacity:1,y:0,scale:1,duration:.28,ease:easeMotion},0);
+      tl.fromTo("#${id}-cloture path",{strokeDasharray:"1 1",strokeDashoffset:1},{strokeDashoffset:0,duration:.38,stagger:.025,ease:"power2.inOut"},.1);`;
+  }
+  const immobile = c.motion?.design === 'static';
+  if (dessin) { corps = dessin.corps; css = dessin.css; js = dessin.js; }
+  if (immobile) js = '';
+  const source = scene.sourcesContinues?'':String(scene.source || '').trim();
   return `<template>
   <!-- Scène « ${echapper(scene.planRef)} » — le spectateur comprend : ${echapper(scene.comprend || '')} -->
   <style>
     #root { position: absolute; inset: 0; }
     #${id}-lab { position: absolute; left: 40px; top: 330px; }
     #${id}-titre { position: absolute; left: 40px; top: ${titreSeul ? 640 : 400}px; width: 900px; font-size: ${titreSeul ? 104 : 80}px; line-height: 1.06; white-space: normal; }
-    #${id}-src { position: absolute; left: 40px; top: 1320px; width: 470px; font: 700 28px Roboto, sans-serif; line-height: 1.3; color: var(--encre-2); }
+    #${id}-src { position: absolute; left: 40px; top: 1320px; width: 470px; font: 700 34px Roboto, sans-serif; line-height: 1.3; color: var(--encre-2); }
     #${id}-src b { display: block; font-weight: 900; letter-spacing: 0.08em; color: var(--accent-vif); margin-bottom: 6px; }
     ${css}
+    ${dessin?.titreCss || ""}
+    ${c.motion?.style ? styleScene(id, c.motion.style,c.motion.decor) : ""}
   </style>
   <div id="root" data-composition-id="${id}" data-width="1080" data-height="1920">
     <div id="${id}-scene" class="scene clip" data-start="0" data-duration="${D.toFixed(3)}" data-track-index="1">
       <div id="${id}-cam" class="camera">
+        <div id="${id}-decor"></div>
         ${lab ? `<div id="${id}-lab" class="pilule p-accent">${echapper(lab)}</div>` : ''}
-        <div id="${id}-titre" class="gros">${echapper(scene.text)}</div>
+        <div id="${id}-titre" class="gros">${dessin?.titreHtml ?? echapper(scene.text)}</div>
         ${corps}
+        <div id="${id}-grain"></div>
         ${source ? `<div id="${id}-src"><b>SOURCE</b>${echapper(source)}</div>` : ''}
       </div>
     </div>
   </div>
   <script>
     (function () {
+      const easeMotion = ${easeMotion.toString()};
       const tl = gsap.timeline({ paused: true });
-      ${c.premier
+      ${c.planCourt || immobile || dessin?.titreAnime ? '' : c.premier
     // Première scène : le texte est déjà là à 0 s (miniature sur les réseaux), puis un léger zoom
     ? `tl.fromTo("#${id}-titre", { scale: 1 }, { scale: 1.04, transformOrigin: "0% 50%", duration: 0.5, ease: "power2.out" }, 0.3);`
-    : `tl.fromTo("#${id}-cam", { opacity: 0, scale: 1.04 }, { opacity: 1, scale: 1, duration: 0.25, ease: "power2.out" }, 0);
+    : `tl.fromTo("#${id}-cam", { opacity: 1, scale: 1.02 }, { opacity: 1, scale: 1, duration: 0.25, ease: "power2.out" }, 0);
       ${lab ? `tl.fromTo("#${id}-lab", { opacity: 0, y: -16 }, { opacity: 1, y: 0, duration: 0.2 }, 0.05);` : ''}
-      tl.fromTo("#${id}-titre", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, 0.1);`}
-      ${source ? `tl.fromTo("#${id}-src", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 0.5);` : ''}
+      tl.fromTo("#${id}-titre", { opacity: 1, y: ${motion.distance_px} }, { opacity: 1, y: 0, duration: ${motion.entree_s}, ease: easeMotion }, 0.1);`}
+      ${source && !immobile && !c.planCourt ? `tl.fromTo("#${id}-src", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 0.5);` : ''}
       ${js}
-      ${c.dernier ? '' : `tl.to("#${id}-cam", { opacity: 0, scale: 0.96, duration: 0.2, ease: "power2.in" }, ${Math.max(0.5, D - 0.22).toFixed(2)});`}
+      ${c.motion?.profondeur&&!immobile?`tl.fromTo("#${id}-decor", {x:-21}, {x:0,duration:${Math.min(.7,D*.5).toFixed(3)},ease:easeMotion},0);
+      ${dessin?`tl.fromTo("#${id}-dessin",{x:-42},{x:0,duration:${Math.min(.7,D*.5).toFixed(3)},ease:easeMotion},0);`:''}
+      tl.fromTo("#${id}-grain",{x:-84},{x:0,duration:${Math.min(.7,D*.5).toFixed(3)},ease:easeMotion},0);`:''}
+      ${c.planCourt || c.dernier || immobile ? '' : `tl.to("#${id}-cam", { opacity: 0.18, scale: 0.98, duration: 0.22, ease: "power2.in" }, ${Math.max(0.5, D - 0.22).toFixed(2)});`}
       window.__timelines = window.__timelines || {};
       window.__timelines["${id}"] = tl;
     })();

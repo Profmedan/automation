@@ -1,0 +1,21 @@
+[
+  {
+    "skill": "lemo-opuscar-video",
+    "repo": "lemomo-ai/lemo-opuscar",
+    "url": "https://github.com/lemomo-ai/lemo-opuscar",
+    "commit": "3a7132b996be0241c1ea0ab180d519f06e6f10b6",
+    "path": "plugin/skills/lemo-opuscar/SKILL.md",
+    "license": "CC-BY-NC-4.0 (documents) ; permission additionnelle dans LICENSE ; MIT (code non importé)",
+    "adaptation": "Principes textuels adaptés à SVG/GSAP/Hyperframes ; aucun exécutable upstream, aucune promesse des 99 styles.",
+    "statut": "actif",
+    "fichiers_references": [
+      "DIRECTOR.md",
+      "TECHNIQUE.md",
+      "styles/README.md",
+      "styles/sketchnote/STYLE.md",
+      "styles/pictogram-motion/STYLE.md",
+      "styles/instruction-manual/STYLE.md"
+    ],
+    "cadre_utilisation": "Usage personnel non commercial confirmé par Pierre le 14 novembre 2026."
+  }
+]

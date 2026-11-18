@@ -1,0 +1,4 @@
+interface:
+  display_name: "Motion Anything · vidéo"
+  short_description: "Ressources motion locales pour les vidéos Vive l’IA"
+  default_prompt: "Utilise $motion-anything-video pour fabriquer la vidéo demandée."

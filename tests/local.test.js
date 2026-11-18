@@ -178,3 +178,11 @@ test('voix : le dictionnaire de prononciation change la voix mot entier par mot 
   const livre = JSON.parse(fs.readFileSync(path.join(RACINE, 'scripts', 'local', 'prononciation.json'), 'utf-8'));
   assert.equal(typeof livre.mots, 'object');
 });
+
+test('visuels : une fraction ou « N sur dix » du plan peut s\'afficher en pourcentage, pas un nombre voisin', () => {
+  // Run Telegram du 17 nov. 2026 : « Un tiers des établissements » affiché « 33 % » → script refusé 3 fois
+  const plan = "Un tiers des établissements de moins de cinq salariés, contre 71 %. Près de quatre employeurs sur dix utilisent l'IA. La moitié des salariés.";
+  const ok = (n) => validerVisuel({ type: 'compteur', valeur: n, libelle: 'établissements' }, 's', plan);
+  for (const n of [33, 40, 50, 71]) assert.deepEqual(ok(n), [], `${n} devrait passer`);
+  for (const n of [34, 30, 66]) assert.ok(ok(n).some((e) => new RegExp(`${n} du visuel n'est pas dans le plan`).test(e)), `${n} devrait être refusé`);
+});

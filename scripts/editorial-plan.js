@@ -369,9 +369,10 @@ function rapportVideo(plan, comprehension, production) {
       `- Temps sur ce Mac : script ${Math.round(t.script || 0)} s, voix ${Math.round(t.voix || 0)} s, rendu ${Math.round(t.rendu || 0)} s (dont Hyperframes ${Math.round(production.rendu_hyperframes_s || 0)} s), test ${Math.round(t.test || 0)} s`,
       `- Voix : ${production.voix}`, ...(production.voix_journal || []).map((x) => `  - ${x}`),
       `- Réécoute Whisper (part des mots du script retrouvés) : ${(production.ressemblance_whisper || []).join(', ')}`,
-      `- Son : ${production.son.lufs} LUFS, crête ${production.son.crete_dBTP} dBTP ; musique ${production.musique} ; bruitages CC0 (skill sound-effects)`,
+      `- Son : ${production.son.lufs} LUFS, crête ${production.son.crete_dBTP} dBTP ; musique ${production.musique} ; ${production.motion ? production.motion.sons : 'bruitages CC0 (skill sound-effects)'}`,
       `- Claude (${production.claude.modele}) : ${production.claude.appels} appels, ${production.claude.entree} jetons en entrée, ${production.claude.sortie} en sortie ≈ ${production.claude.cout_usd} $`, '');
   }
+  if (production?.motion) l.push('## Motion design', '', `- Recettes et provenance : ${production.motion.plan}`, `- Images de contrôle : ${production.motion.revue} (${production.motion.planches} planches ; ${production.motion.statut})`, '- Les images doivent être examinées ; leur extraction ne constitue pas une validation visuelle.', '');
   return l.join('\n');
 }
 

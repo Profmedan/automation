@@ -1,4 +1,7 @@
 {
-  "_note": "Mot écrit → texte lu par la voix clonée (Chatterbox). Ne change que la voix, jamais les sous-titres ni l'écran. N'ajouter une graphie qu'après l'avoir écoutée : le 12 nov. 2026, « Robo-keurve », « Robokeurve », « Robo Curve » ont été moins bien compris que « Robocurve » (réécoute Whisper), et « danger » est bien prononcé (le « donjé » de la 7e génération était une prise ratée).",
-  "mots": {}
+  "_note": "Mot écrit → texte lu par la voix clonée (Chatterbox). Ne change que la voix, jamais les sous-titres ni l'écran. N'ajouter une graphie qu'après l'avoir écoutée : le 12 nov. 2026, « Robo-keurve », « Robokeurve », « Robo Curve » ont été moins bien compris que « Robocurve » (réécoute Whisper), et « danger » est bien prononcé (le « donjé » de la 7e génération était une prise ratée). Règle explicite de Pierre du 14 novembre 2026 : ChatGPT se lit « tchat gépété », IA se lit « i-a », l’IA se lit « l’i-a ». La graphie ChatGPT est demandée par Pierre ; la vérification audio reste à faire sur le témoin. Pierre précise aussi : OpenAI se prononce « Open-A-I ». La graphie fournie est appliquée uniquement au texte TTS.",
+  "mots": {
+    "ChatGPT": "tchat gépété",
+    "OpenAI": "Open-A-I"
+  }
 }

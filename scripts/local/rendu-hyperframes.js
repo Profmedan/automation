@@ -1,6 +1,6 @@
 /**
  * Montage et rendu en local (12 nov. 2026) : Hyperframes (HTML → vidéo), Rhubarb (bouches de l'avatar),
- * FFmpeg (mixage voix + musique Mixkit + bruitages CC0, niveau −16 LUFS, crête vraie < −4 dBTP).
+ * FFmpeg (mixage voix + musique Mixkit + sons procéduraux claude-motion, niveau −16 LUFS, crête vraie < −4 dBTP).
  *
  * Entrées : le script (scènes avec planRef, text, source, visuel…) et le calage de la voix (voix-locale.js).
  * Sortie : <dossier>/video.mp4 (1080 × 1920, H.264, bt709) et <dossier>/video.srt.
@@ -10,6 +10,12 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const CONFIG = require('./config-locale');
 const { htmlScene, echapper } = require('./scenes-visuelles');
+const { planMotion, genererKitSons, revueMotion } = require('./motion-skills');
+const { plansDeRendu } = require('./storyboard-motion');
+const {verifierStoryboardFactuel}=require('./controle-storyboard');
+const { auditerAudio, garderDockerEveille } = require('./revue-audio');
+const { enregistrerBanque } = require('./motion-composition');
+const {FONTES_LOCALES,tokens,cssTokens,preparerDirection}=require('./directions-visuelles');
 
 const L = 1080;
 const H = 1920;
@@ -36,7 +42,7 @@ const CSS_RACINE = `
       .pilule { position: absolute; display: inline-block; padding: 0.22em 0.6em; border-radius: 999px; font: 900 34px Roboto, sans-serif; white-space: nowrap; }
       .p-accent { background: var(--accent-vif); color: #06202f; box-shadow: var(--lueur); }`;
 
-/** Groupes de sous-titres : 4 mots ou 26 caractères au plus, jamais à cheval sur deux scènes. */
+/** Groupes de sous-titres : 4 mots ou 24 caractères au plus, jamais à cheval sur deux scènes. */
 function groupesSousTitres(calage) {
   const groupes = [];
   for (const sc of calage.scenes) {
@@ -44,7 +50,7 @@ function groupesSousTitres(calage) {
     const fermer = () => { if (g.length) groupes.push(g); g = []; };
     for (const m of sc.mots) {
       const texte = [...g, m].map((x) => x.mot).join(' ');
-      if (g.length && (g.length >= 4 || texte.length > 26)) fermer();
+      if (g.length && (g.length >= 4 || texte.length > 24)) fermer();
       g.push(m);
       if (/[.!?;:]$/.test(m.mot)) fermer();
     }
@@ -67,12 +73,12 @@ function srt(groupes) {
   return groupes.map((g, i) => `${i + 1}\n${hms(g.debut)} --> ${hms(g.fin)}\n${g.mots.map((m) => m.mot).join(' ')}\n`).join('\n');
 }
 
-function htmlSousTitres(groupes, duree) {
+function htmlSousTitres(groupes, duree, style) {
   return `<template>
-  <style>
+  <style>${FONTES_LOCALES}
     #root { position: absolute; inset: 0; pointer-events: none; }
-    .st-groupe { position: absolute; left: 40px; top: 170px; width: 1000px; text-align: center; white-space: nowrap; opacity: 0;
-      font: 900 64px Roboto, sans-serif; line-height: 1.15; color: #fff; text-shadow: 0 4px 18px rgba(0,0,0,0.75); }
+    .st-groupe { position:absolute; left:50%; top:170px; width:max-content; max-width:1000px; transform:translateX(-50%); padding:10px 18px; text-align:center; white-space:nowrap; opacity:0;
+      background:#24221ff2; color:#fff; font:900 74px VideoSans,Roboto,sans-serif; line-height:1.15; text-shadow:none; }
     .st-mot { display: inline-block; margin: 0 0.12em; opacity: 0; }
   </style>
   <div id="root" data-composition-id="soustitres" data-width="${L}" data-height="${H}">
@@ -136,7 +142,7 @@ function htmlAvatar(reperes, debutsScenes, duree) {
     #root { position: absolute; inset: 0; pointer-events: none; }
     /* Consigne du 5 nov. 2026 : avatar en bas à droite (x 540–920, y 1303–1610), au-dessus de la colonne de boutons du réseau */
     #av-cadre { position: absolute; left: 540px; top: 1303px; width: 380px; height: 307px; }
-    #av-detour { position: absolute; inset: 0; filter: drop-shadow(0 6px 12px rgba(0, 8, 20, 0.7)) drop-shadow(0 0 4px rgba(150, 214, 238, 0.95)) drop-shadow(0 0 18px rgba(79, 179, 217, 0.6)); }
+    #av-detour { position: absolute; inset: 0; filter: drop-shadow(0 6px 12px rgba(30, 22, 18, 0.35)); }
     #av-fondu { position: absolute; inset: 0; -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%); mask-image: linear-gradient(to bottom, #000 78%, transparent 100%); }
     #av-entree, #av-flotte, #av-hoche { position: absolute; inset: 0; }
     #av-hoche img { position: absolute; display: block; }
@@ -204,13 +210,14 @@ function rhubarb(voix, dossier) {
   return cues.map((c) => [+c.start.toFixed(3), c.value === 'G' || c.value === 'H' ? 'C' : c.value]);
 }
 
-/** Bruitages CC0 : un souffle à chaque changement de scène, un impact sur la conclusion et sur l'appel. */
+/** Repères du son procédural claude-motion : mouvements, sous-idées et une seule emphase forte. */
 function reperesSons(fenetres, script) {
   const sons = [];
+  const hero = script.scenes.some(s => s.planRef === 'conclusion') ? 'conclusion' : 'appel';
   fenetres.forEach((f, i) => {
     if (i > 0) sons.push({ fichier: 'whoosh.ogg', t: Math.max(0, f.debut - 0.07), volume: 0.22 });
     const ref = script.scenes[i].planRef;
-    if (ref === 'conclusion' || ref === 'appel') sons.push({ fichier: 'impact.ogg', t: f.debut + 0.25, volume: 0.3 });
+    if (ref === hero) sons.push({ fichier: 'impact.ogg', t: f.debut + 0.25, volume: 0.3 });
     if (/^developpement\./.test(ref)) sons.push({ fichier: 'pop.ogg', t: f.debut + 0.45, volume: 0.25 });
   });
   return sons;
@@ -223,9 +230,9 @@ function mesurer(fichier) {
 }
 
 /** Voix + musique (baissée sous la voix) + bruitages → mix.wav (48 kHz stéréo). */
-function mixer(calage, sons, duree, dossier) {
+function mixer(calage, sons, duree, dossier, kit) {
   const entrees = ['-i', calage.voix, '-stream_loop', '-1', '-i', CONFIG.MUSIQUE.fichier];
-  sons.forEach((s) => entrees.push('-i', path.join(CONFIG.SFX, s.fichier)));
+  sons.forEach((s) => entrees.push('-i', path.join(kit || CONFIG.SFX, kit ? s.fichier.replace(/\.ogg$/, '.wav') : s.fichier)));
   const f = [
     '[0:a]aresample=48000,aformat=channel_layouts=stereo,apad,atrim=0:' + duree.toFixed(3) + ',asplit=2[voix][cle]',
     `[1:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${duree.toFixed(3)},afade=t=in:d=0.6,afade=t=out:st=${(duree - 2.5).toFixed(3)}:d=2.5,volume=0.16[mus]`,
@@ -247,22 +254,33 @@ function mixer(calage, sons, duree, dossier) {
 /**
  * @returns {Promise<{videoPath, srtPath, duree, mesures, secondes}>}
  */
-async function rendreVideoLocale(script, calage, dossierVideo) {
+async function rendreVideoLocale(script, calage, dossierVideo, options={}) {
   const t0 = Date.now();
   const projet = path.join(dossierVideo, 'hyperframes');
   for (const d of ['compositions', 'assets/avatar', 'vendor']) fs.mkdirSync(path.join(projet, d), { recursive: true });
+  if(script.storyboardMotion&&!options.preparerSeulement)await verifierStoryboardFactuel(script,script.storyboardMotion,dossierVideo);
+  preparerDirection(script,dossierVideo);
   const fenetres = fenetresScenes(calage);
   const duree = +(calage.duree + QUEUE).toFixed(3);
+  const plans = plansDeRendu(script, fenetres);
+  const images = plans.map(p=>p.fenetre);
+  const motionPlan = planMotion({...script,scenes:plans.map(p=>p.scene)}, images);
+  if(script.storyboardMotion)motionPlan.cadence_s=script.storyboardMotion.intervalle_s;
+  fs.writeFileSync(path.join(dossierVideo, 'motion-plan.json'), JSON.stringify(motionPlan, null, 2));
   const nbSousIdees = script.scenes.filter((s) => /^developpement\./.test(s.planRef)).length;
 
-  fenetres.forEach((f, i) => {
-    const html = htmlScene(script.scenes[i], {
-      id: f.id, duree: f.duree, debut: f.debut, mots: f.voix.mots, nbSousIdees, premier: i === 0, dernier: i === fenetres.length - 1,
+  plans.forEach(({fenetre:f,scene}, i) => {
+    const html = htmlScene(scene, {
+      id: f.id, duree: f.duree, debut: f.debut, mots: f.voix.mots, nbSousIdees, premier: i === 0, dernier: i === plans.length - 1, motion: motionPlan.scenes[i], planCourt:scene.planCourt,
     });
     fs.writeFileSync(path.join(projet, 'compositions', `${f.id}.html`), html);
   });
+  fs.mkdirSync(path.join(projet,'assets/fonts'),{recursive:true});
+  const polices={VideoSerif:'/System/Library/Fonts/Supplemental/Georgia Bold.ttf',VideoHand:'/System/Library/Fonts/Supplemental/Chalkduster.ttf',VideoSans:'/System/Library/Fonts/Avenir Next Condensed.ttc'};
+  for(const [nom,source] of Object.entries(polices))fs.copyFileSync(source,path.join(projet,'assets/fonts',nom+path.extname(source)));
+  const fontes=Object.keys(polices).map(n=>`@font-face{font-family:${n};src:url("assets/fonts/${n}${path.extname(polices[n])}");font-weight:100 900;}`).join('\n');
   const groupes = groupesSousTitres(calage);
-  fs.writeFileSync(path.join(projet, 'compositions', 'soustitres.html'), htmlSousTitres(groupes, duree));
+  fs.writeFileSync(path.join(projet, 'compositions', 'soustitres.html'), htmlSousTitres(groupes, duree, motionPlan.style));
   fs.writeFileSync(path.join(projet, 'compositions', 'fond.html'), htmlFond(duree));
   const reperes = rhubarb(calage.voix, path.join(dossierVideo, 'voix'));
   fs.writeFileSync(path.join(projet, 'compositions', 'avatar.html'), htmlAvatar(reperes, fenetres.map((f) => f.debut), duree));
@@ -280,8 +298,10 @@ async function rendreVideoLocale(script, calage, dossierVideo) {
     <title>${echapper(script.title || 'Vidéo')}</title>
     <script src="vendor/gsap.min.js"></script>
     <style>${CSS_RACINE}
+      ${fontes}
+      :root{${cssTokens(tokens(motionPlan.style))}}
       #fond { z-index: 0; }
-      ${fenetres.map((f) => `#${f.id}`).join(', ')} { z-index: 2; }
+      ${images.map((f) => `#${f.id}`).join(', ')} { z-index: 2; }
       #soustitres { z-index: 8; }
       #avatar { z-index: 10; }
     </style>
@@ -289,7 +309,7 @@ async function rendreVideoLocale(script, calage, dossierVideo) {
   <body>
     <div id="root" data-composition-id="main" data-start="0" data-duration="${duree.toFixed(3)}" data-width="${L}" data-height="${H}" data-fps="30">
 ${hote('fond', 0, duree, 0, 'graphics')}
-${fenetres.map((f, i) => hote(f.id, f.debut, f.duree, 1 + (i % 2), 'graphics')).join('\n')}
+${images.map((f, i) => hote(f.id, f.debut, f.duree, 1 + (i % 2), 'graphics')).join('\n')}
 ${hote('soustitres', 0, duree, 4, 'captions')}
 ${hote('avatar', 0, duree, 5, 'graphics')}
     </div>
@@ -301,23 +321,30 @@ ${hote('avatar', 0, duree, 5, 'graphics')}
 </html>
 `;
   fs.writeFileSync(path.join(projet, 'index.html'), index);
+  // Préparer des images de travail ne produit aucun MP4 ni résultat prêt à approuver.
+  if(options.preparerSeulement)return {projet,duree,motionPlan};
 
+  const fermerVeilleDocker=garderDockerEveille();
+  try{
   // Contrôle Hyperframes puis rendu (image seule ; le son est mixé à part par FFmpeg)
   const npx = (args, opts = {}) => execFileSync('npx', ['--yes', CONFIG.HYPERFRAMES, ...args], { cwd: projet, stdio: 'pipe', maxBuffer: 64 * 1024 * 1024, ...opts }).toString();
   let controle = '';
   try {
     controle = npx(['check', '--json']);
   } catch (e) {
-    controle = String(e.stdout || '') + String(e.stderr || '');
+    controle = String(e.stdout || '');
+    fs.writeFileSync(path.join(dossierVideo,'hyperframes-check.stderr.log'),String(e.stderr||e.message||''));
   }
   fs.writeFileSync(path.join(dossierVideo, 'hyperframes-check.json'), controle);
+  verifierControleHyperframes(controle);
   const tRendu = Date.now();
   const brut = path.join(dossierVideo, 'rendu-brut.mp4');
   npx(['render', '--quality', 'delivery', '--output', brut, '--quiet'], { timeout: 90 * 60 * 1000 });
   const secondesRendu = (Date.now() - tRendu) / 1000;
 
   // Son : mixage, puis gain vers −16 LUFS et limiteur (crête vraie < −4 dBTP) ; image copiée, marquée bt709
-  const mix = mixer(calage, reperesSons(fenetres, script), duree, dossierVideo);
+  const kit = genererKitSons(dossierVideo);
+  const mix = mixer(calage, reperesSons(fenetres, script), duree, dossierVideo, kit);
   const avant = mesurer(mix);
   const gain = +(CIBLE_LUFS - avant.lufs).toFixed(2);
   const videoPath = path.join(dossierVideo, 'video.mp4');
@@ -326,13 +353,25 @@ ${hote('avatar', 0, duree, 5, 'graphics')}
     '-af', `volume=${gain}dB,alimiter=limit=0.55:attack=2:release=60:level=false`, '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
     '-shortest', '-movflags', '+faststart', videoPath], { stdio: 'pipe' });
   const apres = mesurer(videoPath);
+  // Aucun rendu prêt à approuver ne peut ignorer une erreur Earshot.
+  const earshot=auditerAudio(videoPath,dossierVideo,images);
+  const revue = revueMotion(videoPath, images, dossierVideo, CONFIG.FFMPEG);
+  motionPlan.banque = enregistrerBanque({...script,scenes:plans.map(p=>p.scene)}, path.join(path.dirname(dossierVideo), '.motion-library'));
+  fs.writeFileSync(path.join(dossierVideo, 'motion-plan.json'), JSON.stringify(motionPlan, null, 2));
   const srtPath = path.join(dossierVideo, 'video.srt');
   fs.writeFileSync(srtPath, srt(groupes));
   return {
-    videoPath, srtPath, duree, secondes: (Date.now() - t0) / 1000, secondesRendu,
+    videoPath, srtPath, duree, secondes: (Date.now() - t0) / 1000, secondesRendu,earshot,
     mesures: { lufs: apres.lufs, crete_dBTP: apres.crete, gain_dB: gain },
     musique: CONFIG.MUSIQUE.credit,
+    motion: { style: motionPlan.style, direction:motionPlan.direction, sources:motionPlan.sources, ressources_indisponibles:motionPlan.ressources_indisponibles, cadence_s:motionPlan.cadence_s||null, plans:images.length, banque: motionPlan.banque, designs: [...new Set(motionPlan.scenes.map(s => s.design))], plan: 'motion-plan.json', revue: 'motion-review/review.json', statut: revue.statut, planches: revue.planches.length, sons: 'claude-motion (synthèse locale, MIT)' },
   };
+  }finally{fermerVeilleDocker();}
 }
 
-module.exports = { rendreVideoLocale, groupesSousTitres, fenetresScenes, srt, reperesSons, htmlAvatar, htmlSousTitres };
+function verifierControleHyperframes(texte){
+ let c;try{c=JSON.parse(texte);}catch{throw Error('Contrôle Hyperframes illisible ; rendu arrêté.');}
+ if(!c.ok||c.browserSkipped||!c.runtime?.ok||!c.layout?.ok||!c.contrast?.ok||!c.layout.samples?.length)throw Error('Contrôle Hyperframes incomplet ou en erreur ; rendu arrêté avant export.');
+ return c;
+}
+module.exports = { CSS_RACINE, rendreVideoLocale, groupesSousTitres, fenetresScenes, srt, reperesSons, htmlAvatar, htmlSousTitres,verifierControleHyperframes };

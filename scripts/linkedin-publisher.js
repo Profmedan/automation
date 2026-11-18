@@ -11,6 +11,9 @@ const fs = require('fs').promises;
 const { createReadStream, statSync } = require('fs');
 const path = require('path');
 
+// Même version que le partage des articles ; surcharge possible dans .env.
+const LINKEDIN_API_VERSION = process.env.LINKEDIN_API_VERSION || '202610';
+
 const TOKEN_PATH = path.join(__dirname, '..', 'linkedin-token.json');
 
 /**
@@ -77,7 +80,7 @@ async function initializeVideoUpload(accessToken, personURN, videoPath) {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'LinkedIn-Version': '202503',
+          'LinkedIn-Version': LINKEDIN_API_VERSION,
           'X-Restli-Protocol-Version': '2.0.0'
         }
       }
@@ -164,7 +167,7 @@ async function finalizeVideoUpload(accessToken, videoURN, uploadToken, uploadedP
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'LinkedIn-Version': '202503',
+          'LinkedIn-Version': LINKEDIN_API_VERSION,
           'X-Restli-Protocol-Version': '2.0.0'
         }
       }
@@ -208,7 +211,7 @@ async function createPost(accessToken, personURN, videoURN, caption, articleUrl)
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'LinkedIn-Version': '202503',
+          'LinkedIn-Version': LINKEDIN_API_VERSION,
           'X-Restli-Protocol-Version': '2.0.0'
         }
       }
@@ -347,9 +350,9 @@ async function addComment(accessToken, postURN, commentText) {
     console.error('   ⚠️ API v2:', error.response?.status, error.response?.data?.message || error.message);
   }
 
-  // Stratégie 2: REST API avec version 202401 (avant changement permissions)
+  // Stratégie 2 : API REST avec la version configurée
   try {
-    console.log('   Tentative REST API v202401...');
+    console.log(`   Tentative REST API v${LINKEDIN_API_VERSION}...`);
     await axios.post(
       'https://api.linkedin.com/rest/socialActions/' + encodeURIComponent(postURN) + '/comments',
       {
@@ -362,15 +365,15 @@ async function addComment(accessToken, postURN, commentText) {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'LinkedIn-Version': '202401',
+          'LinkedIn-Version': LINKEDIN_API_VERSION,
           'X-Restli-Protocol-Version': '2.0.0'
         }
       }
     );
-    console.log('✅ Commentaire ajouté (REST 202401) !');
+    console.log('✅ Commentaire ajouté (REST) !');
     return;
   } catch (error) {
-    console.error('   ⚠️ REST 202401:', error.response?.status, error.response?.data?.message || error.message);
+    console.error('   ⚠️ REST:', error.response?.status, error.response?.data?.message || error.message);
   }
 
   // Stratégie 3: API comments dédiée
@@ -390,7 +393,7 @@ async function addComment(accessToken, postURN, commentText) {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'LinkedIn-Version': '202503',
+          'LinkedIn-Version': LINKEDIN_API_VERSION,
           'X-Restli-Protocol-Version': '2.0.0'
         }
       }

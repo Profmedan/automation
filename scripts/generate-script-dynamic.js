@@ -9,6 +9,10 @@
 const {
   validerPlanEditorial, genererPlanEditorial, lignesDuPlan, mots, lireJson, appelerClaude, estMotAbstraitSeul, hoteDuBlog, libelleSource, MAX_MOTS_ECRAN, NOM_BLOG, corrigerNomBlog, nomBlogFautif, ESSAIS, raccourcirTextesEcran,
 } = require('./editorial-plan');
+const fs = require('node:fs');
+const path = require('node:path');
+const { lireBanque, choisirStyle, normaliserComposition } = require('./local/motion-composition');
+const { consignesMotion, choisirSkill } = require('./local/motion-skills');
 const { TYPES_VISUELS, validerVisuel } = require('./local/scenes-visuelles');
 
 // Voix clonée mesurée le 12 nov. 2026 : 165 mots → 77 s de parole, soit ≈ 2,1 mots par seconde.
@@ -34,7 +38,8 @@ function budgetsMots(plan) {
   return b;
 }
 
-function promptScript(article, plan, erreursPrecedentes = []) {
+function promptScript(article, plan, erreursPrecedentes = [], gabarits = [], selectionMotion={skill:"motion-anything-video"}) {
+  const direction = choisirStyle(article.title, article.motionStyle);
   const reprise = erreursPrecedentes.length
     ? `\n\nTA PROPOSITION PRÉCÉDENTE A ÉTÉ REFUSÉE POUR CES RAISONS, CORRIGE-LES TOUTES :\n- ${erreursPrecedentes.join('\n- ')}\n`
     : '';
@@ -61,18 +66,27 @@ RÈGLES DES SCÈNES :
 - Minutage : accroche 0–3 s, idée principale 3–8 s, sous-idées 8–42 s, nuances 42–50 s, conclusion 50–55 s, appel et sources 55–60 s.
 - La première scène commence directement par l'accroche (pas de « Bonjour »).
 
-VISUELS : aucune image n'est générée. Chaque scène (sauf "appel" et "sources", dessinées automatiquement) choisit dans "visuel" un schéma dessiné en code qui MONTRE l'idée (champ "visuel" du plan), jamais un simple décor :
+${consignesMotion(selectionMotion)}
+DIRECTION PROPOSÉE POUR CE SUJET : ${direction}. Tu peux retenir une autre direction de la liste si elle sert mieux le sujet ; conserve-la sur toute la vidéo.
+${gabarits.length ? "DISPOSITIONS DE LA BANQUE LOCALE À RÉINTERPRÉTER (remplace tous les textes et nombres par ceux du plan ; tu peux créer une autre disposition) :\n" + JSON.stringify(gabarits) : ""}
+
+${selectionMotion.skill==='lemo-opuscar-video'?'TRAITEMENT LEMO-OPUSCAR : ajoute "traitement" : {"structures":["...","...","..."],"choix":"...","raison":"...","geste_signature":"..."}. Compare trois structures courtes avant de retenir celle qui sert le sujet ; ces notes ne sont pas affichées.':''}
+DIRECTION PAR SÉQUENCE : le champ facultatif motionStyle d’une scène peut préciser un second langage compatible avec la direction générale, par exemple handdrawn pour une explication progressive dans un film editorial. Choisir au maximum deux langages cohérents, pas une nouvelle palette à chaque dessin. Varier aussi le cadrage et la taille du sujet, sans déplacer les titres en cours de lecture.
+VISUELS : aucune image n'est générée. Chaque scène (sauf "appel" et "sources", dessinées automatiquement) fournit dans "visuel" un schéma dessiné en code qui MONTRE l'idée du plan.
+Sur l'ensemble idée principale + développement + nuances, au moins la moitié des scènes utilisent le type "composition" décrit plus haut, avec des dispositions adaptées à leurs relations : pas le même alignement de cartes répété partout. Aucun simple "titre" sur ces scènes explicatives. Fais varier les mouvements utiles à la lecture parmi ceux disponibles ; un seul accent dominant.
+Les anciens schémas suivants restent possibles lorsqu'ils expriment mieux un chiffre, une comparaison ou des étapes :
 - {"type": "compteur", "valeur": 51, "sur": 60, "unite": "", "libelle": "tentatives avec l'image floue"}  (libellé ≤ 8 mots ; "sur" et "unite" facultatifs)
 - {"type": "barres", "unite": "%", "donnees": [{"libelle": "Image nette", "valeur": 27}, {"libelle": "Image floue", "valeur": 87.7}]}  (2 à 4 barres, libellés ≤ 4 mots)
 - {"type": "comparaison", "gauche": {"titre": "Ce que voit l'IA", "texte": "une pomme"}, "droite": {"titre": "La vraie scène", "texte": "une poupée"}}  (titres ≤ 4 mots, textes ≤ 10 mots ; à droite, ce qui surprend)
 - {"type": "etapes", "etapes": ["L'IA annonce « j'ai fini »", "Un modèle testé juge", "Personne ne vérifie"]}  (2 à 4 étapes de ≤ 7 mots)
 - {"type": "citation", "texte": "…", "auteur": "…"}  (≤ 25 mots, citation exacte de l'article)
-- {"type": "titre"}  (seulement le texte à l'écran, en grand)
-Tout nombre d'un visuel doit figurer dans le plan éditorial : aucun chiffre inventé.
+- {"type": "titre"}  (accroche ou conclusion seulement : texte à l'écran en grand)
+Les coordonnées de mise en page d'une composition ne sont pas des données factuelles. Tout nombre affiché d'un visuel doit figurer dans le plan éditorial : aucun chiffre inventé.
 LONGUEUR : ${MOTS_MIN} à ${MOTS_MAX} mots dits en tout (vidéo de moins de 60 s).
 ${reprise}
 Réponds en JSON UNIQUEMENT, sans markdown :
 {
+  "motionStyle": "${direction}",
   "title": "${String(article.title || '').replace(/"/g, '\\"')}",
   "scenes": [
     { "id": 1, "planRef": "accroche", "comprend": "...", "narration": "...", "text": "6 mots max", "source": "", "duration": 3, "visuel": { "type": "titre" } }
@@ -97,6 +111,7 @@ function sourceDuPlan(ref, plan) {
  */
 function normaliserScenes(script, plan) {
   for (const sc of script.scenes || []) {
+    normaliserComposition(sc.visuel);
     sc.narration = corrigerNomBlog(sc.narration);
     sc.text = corrigerNomBlog(sc.text);
     sc.planRef = String(sc.planRef || '').trim()
@@ -157,6 +172,11 @@ function validerVisuels(script, plan, article = {}) {
     if (s.visuel && s.visuel.type === 'citation' && !texteArticle.includes(sansPonctuation(s.visuel.texte))) {
       e.push(`scène ${i + 1} : citation absente de l'article (« ${s.visuel.texte} ») : une citation est reprise mot pour mot, jamais inventée`);
     }
+    if (s.visuel?.type === 'composition') {
+      for (const element of s.visuel.elements || []) for (const match of String(element?.texte || '').matchAll(/«([^»]+)»/g)) {
+        if (!texteArticle.includes(sansPonctuation(match[1]))) e.push(`scène ${i + 1} : citation de composition absente de l'article (« ${match[1]} »)`);
+      }
+    }
     return e;
   });
 }
@@ -192,6 +212,7 @@ function validerScript(script, plan) {
 
   const adresse = plan.appel && plan.appel.adresse_blog;
   const appel = scenes.filter((s) => s.planRef === 'appel');
+  if(appel.length&&!appel.some(s=>sansPonctuation(s.narration).includes(sansPonctuation(NOM_BLOG))))erreurs.push(`scène appel : le nom du blog doit être prononcé, exactement « ${NOM_BLOG} »`);
   if (adresse && appel.length && !appel.some((s) => `${s.narration} ${s.text}`.toLowerCase().includes(adresse.toLowerCase().split('.')[0]))) {
     erreurs.push(`scène appel : l'adresse du blog (${adresse}) n'est ni dite ni affichée`);
   }
@@ -213,10 +234,20 @@ function validerScript(script, plan) {
   return erreurs;
 }
 
+/** La direction demandée est un contrat vérifié, pas seulement une préférence du prompt. */
+function validerDirectionMotion(script) {
+  const coeur = (script.scenes || []).filter(s => /^(idee_principale|developpement\.\d+|nuance\.\d+)$/.test(s.planRef));
+  const originales = coeur.filter(s => s.visuel?.type === 'composition').length;
+  const minimum = Math.ceil(coeur.length / 2);
+  const erreurs = originales < minimum ? [`direction motion : ${minimum} compositions originales requises sur ${coeur.length} scènes explicatives ; ${originales} reçues`] : [];
+  for (const s of coeur) if (s.visuel?.type === 'titre') erreurs.push(`${s.planRef} : un simple titre ne montre pas l'idée ; dessine une composition explicative`);
+  return erreurs;
+}
+
 /**
  * @param {{title, content, url}} article
  * @param {object} [plan]  plan éditorial validé ; s'il manque (anciens appelants), il est écrit ici d'abord
- * @param {{appelerModele?: Function, consignes?: string[]}} options  consignes : erreurs à corriger (ex. test de compréhension)
+ * @param {{appelerModele?: Function, consignes?: string[], dossierDiagnostic?: string}} options
  */
 async function generateVideoScript(article, plan, options = {}) {
   // Étape obligatoire : pas de script sans plan éditorial validé
@@ -224,24 +255,38 @@ async function generateVideoScript(article, plan, options = {}) {
   const erreursPlan = validerPlanEditorial(plan, { articleUrl: article.url });
   if (erreursPlan.length) throw new Error(`Plan éditorial invalide : ${erreursPlan.join(' ; ')}`);
 
-  const appeler = options.appelerModele || ((p, s) => appelerClaude(p, s, 4096));
-  const system = 'Tu es scénariste vidéo. Tu suis le plan éditorial ligne par ligne. Réponds TOUJOURS en JSON valide uniquement, sans markdown.';
+  const selectionMotion=options.selectionMotion||choisirSkill(options.dossierDiagnostic,article.motionSkill||process.env.VIDEO_MOTION_SKILL,options);
+  const appeler = options.appelerModele || ((p, s) => appelerClaude(p, s, 8192));
+  const gabarits = lireBanque(options.banqueMotion, article.title || '');
+  const system = 'Tu es scénariste vidéo et motion designer. Tu suis le plan éditorial ligne par ligne. Réponds TOUJOURS en JSON valide uniquement, sans markdown.';
   // Consignes (ex. manques du test de compréhension) et erreurs déjà vues restent dans chaque reprise
   const vues = [...(options.consignes || [])];
   let erreurs = [];
   let script;
+  const diagnostic = (essai, brut, erreurs) => {
+    if (!options.dossierDiagnostic) return;
+    fs.mkdirSync(options.dossierDiagnostic, { recursive: true });
+    let fichier = path.join(options.dossierDiagnostic, `script-essai-${essai}.json`);
+    let reprise = 2;
+    while (fs.existsSync(fichier)) fichier = path.join(options.dossierDiagnostic, `script-essai-${essai}-reprise-${reprise++}.json`);
+    fs.writeFileSync(fichier, JSON.stringify({ essai, script: brut, erreurs }, null, 2), { flag: 'wx' });
+  };
   for (let essai = 1; essai <= ESSAIS; essai++) {
     console.log(`⏱️  Script depuis le plan éditorial (essai ${essai}/${ESSAIS})...`);
+    let reponse;
     try {
-      script = lireJson(await appeler(promptScript(article, plan, vues), system));
+      reponse = await appeler(promptScript(article, plan, vues, gabarits, selectionMotion), system);
+      script = lireJson(reponse);
     } catch (e) {
       if (e && e.name === 'ServicePayantBloque') throw e;
       erreurs = [`réponse illisible (${e.message}) : JSON seul, sans Markdown`];
       erreurs.forEach((x) => { if (!vues.includes(x)) vues.push(x); });
       console.warn(`⚠️  Script illisible (essai ${essai}/${ESSAIS}) : ${e.message}`);
+      diagnostic(essai, reponse || null, erreurs);
       script = { scenes: [] };
       continue;
     }
+    const brut = structuredClone(script);
     // Haiku suit mal un budget de mots en écrivant tout le script : une passe ciblée raccourcit les narrations
     normaliserScenes(script, plan);
     if (motsDits(script) > MOTS_MAX) {
@@ -252,22 +297,14 @@ async function generateVideoScript(article, plan, options = {}) {
       console.log(`✂️  Narration raccourcie scène par scène : ${avant} → ${motsDits(script)} mots`);
     }
     await raccourcirTextesEcran((script.scenes || []).filter((sc) => typeof sc.text === 'string').map((cible) => ({ cible, champ: 'text' })), appeler);
-    erreurs = [...validerScript(script, plan), ...validerVisuels(script, plan, article)];
+    erreurs = [...validerScript(script, plan), ...validerVisuels(script, plan, article), ...validerDirectionMotion(script)];
+    diagnostic(essai, brut, erreurs);
     if (erreurs.length === 0) break;
     erreurs.forEach((e) => { if (!vues.includes(e)) vues.push(e); });
     console.warn(`⚠️  Script refusé (essai ${essai}/${ESSAIS}) :\n- ${erreurs.join('\n- ')}`);
   }
-  const bloquantes = validerScript(script, plan);
+  const bloquantes = [...validerScript(script, plan), ...validerVisuels(script, plan, article), ...validerDirectionMotion(script)];
   if (bloquantes.length) throw new Error(`Script invalide après ${ESSAIS} essais : ${bloquantes.join(' ; ')}`);
-  // Un visuel encore invalide après reprise devient un simple titre (jamais un chiffre inventé à l'écran)
-  script.scenes.forEach((s, i) => {
-    if (['appel', 'sources'].includes(s.planRef)) return;
-    const e = validerVisuels({ scenes: [s] }, plan, article).map((x) => x.replace('scène 1', `scène ${i + 1}`));
-    if (e.length) {
-      console.warn(`⚠️  ${e.join(' ; ')} → visuel remplacé par le texte à l'écran seul`);
-      s.visuel = { type: 'titre' };
-    }
-  });
 
   script.scenes = script.scenes.map((s, i) => ({
     ...s,
@@ -280,6 +317,7 @@ async function generateVideoScript(article, plan, options = {}) {
     ...(s.planRef === 'appel' ? { adresse: plan.appel.adresse_blog } : {}),
     ...(s.planRef === 'sources' ? { sourcesEcran: plan.sources.map((x) => ({ titre: x.titre, auteur: x.auteur })) } : {}),
   }));
+  script.selectionMotion=selectionMotion;
   script.editorialPlan = plan;
   script.title = script.title || article.title;
   script.hook = plan.accroche.texte_ecran;

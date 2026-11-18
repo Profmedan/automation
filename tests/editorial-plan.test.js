@@ -29,10 +29,16 @@ function scriptBon(plan) {
           : `Narration concrète de ${ref} : une idée précise et vérifiable.`,
       text: ref === 'appel' ? 'vive-lia.blogspot.com' : ref === 'sources' ? 'Robocurve · Vive l\'IA' : 'Texte concret de scène',
       duration: 4,
-      visuel: { type: 'titre' },
+      visuel: { type: 'composition', intention: 'Montrer les éléments du plan', elements: [{ id: 'e0', type: 'carte', texte: 'Image nette', x: 5, y: 20, w: 38, h: 40, mouvement: 'volet' }, { id: 'e1', type: 'carte', texte: 'Décision du robot', x: 57, y: 20, w: 38, h: 40, mouvement: 'zoom' }], liens: [{ de: 'e0', vers: 'e1' }] },
     })),
   };
 }
+
+test('le nom du blog doit encore être prononcé après la condensation de l’appel',()=>{
+ const plan=planBon(),s=scriptBon(plan);
+ s.scenes.find(sc=>sc.planRef==='appel').narration='Lisez l’analyse complète sur vive-lia.blogspot.com';
+ assert.ok(validerScript(s,plan).some(e=>e.includes('nom du blog doit être prononcé')));
+});
 
 test('le plan de « Plante le couteau » est valide', () => {
   assert.deepEqual(validerPlanEditorial(planBon(), { articleUrl: URL_ARTICLE }), []);
@@ -324,7 +330,7 @@ test('corrections mécaniques : « nuances.1 » devient « nuance.1 », la scèn
   assert.equal(script.scenes.find((x) => x.planRef === 'sources').text, 'Sources : Robocurve et 1 autre');
 });
 
-test('une citation inventée n\'apparaît jamais à l\'écran : le visuel devient un titre (cas réel du 12 nov.)', async () => {
+test('une citation inventée bloque la génération plutôt que de supprimer le dessin', async () => {
   const plan = planBon();
   const s = scriptBon(plan);
   s.scenes.find((x) => x.planRef === 'nuance.2').visuel = { type: 'citation', texte: 'Le problème est identifié. Comment le résoudre ?', auteur: 'Question ouverte' };
@@ -334,8 +340,7 @@ test('une citation inventée n\'apparaît jamais à l\'écran : le visuel devien
   const { validerVisuels } = require('../scripts/generate-script-dynamic');
   assert.ok(contient(validerVisuels(s, plan, article), /citation absente de l'article/));
   assert.deepEqual(validerVisuels(vraie, plan, article), []);
-  const script = await generateVideoScript(article, plan, { appelerModele: async () => JSON.stringify(s) });
-  assert.deepEqual(script.scenes.find((x) => x.planRef === 'nuance.2').visuel, { type: 'titre' });
+  await assert.rejects(generateVideoScript(article, plan, { appelerModele: async () => JSON.stringify(s) }), /citation absente de l'article/);
 });
 
 test('nom du blog : « Vivre l\'IA » est corrigé avant la voix, un autre nom est refusé, l\'adresse n\'est pas touchée', async () => {
